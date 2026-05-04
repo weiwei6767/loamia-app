@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useState, useTransition } from "react";
+import { useActionState, useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   generateReport,
@@ -8,6 +8,7 @@ import {
   deleteTemplate,
   saveSectionPreset,
   deleteSectionPreset,
+  analyzeReferenceStyle,
   deleteCustomStyle,
   type GenerateState,
   type SaveTemplateState,
@@ -87,6 +88,45 @@ export function GenerateForm({
   const [presetPending, setPresetPending] = useState(false);
   const [activePreset, setActivePreset] = useState<string | null>("system:standard");
   const router = useRouter();
+
+  // Vision upload (inline, between style picker and generate button)
+  const visionFileRef = useRef<HTMLInputElement>(null);
+  const [visionName, setVisionName] = useState("");
+  const [visionMsg, setVisionMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
+  const [visionPending, setVisionPending] = useState(false);
+  const [visionOpen, setVisionOpen] = useState(false);
+
+  async function handleAnalyzeVision() {
+    setVisionMsg(null);
+    const file = visionFileRef.current?.files?.[0];
+    if (!file) {
+      setVisionMsg({ kind: "err", text: "請選擇圖片" });
+      return;
+    }
+    if (!visionName.trim()) {
+      setVisionMsg({ kind: "err", text: "請輸入風格名稱" });
+      return;
+    }
+    setVisionPending(true);
+    try {
+      const fd = new FormData();
+      fd.set("brandId", brandId);
+      fd.set("refImage", file);
+      fd.set("styleName", visionName);
+      const result = await analyzeReferenceStyle(undefined, fd);
+      if (result && "success" in result && result.success) {
+        setVisionMsg({ kind: "ok", text: `✓ ${t("reports.vision.success")}：${result.success}` });
+        setVisionName("");
+        if (visionFileRef.current) visionFileRef.current.value = "";
+        router.refresh();
+        setTimeout(() => setVisionMsg(null), 2500);
+      } else if (result && "error" in result && result.error) {
+        setVisionMsg({ kind: "err", text: result.error });
+      }
+    } finally {
+      setVisionPending(false);
+    }
+  }
 
   async function handleSavePreset() {
     setPresetMsg(null);
@@ -409,6 +449,70 @@ export function GenerateForm({
             );
           })}
         </div>
+      </div>
+
+      {/* Vision upload — between style picker and generate button */}
+      <div className="border border-[var(--line)] bg-[var(--surface-2)] p-4">
+        <button
+          type="button"
+          onClick={() => setVisionOpen((v) => !v)}
+          className="w-full text-left text-xs font-mono tracking-widest text-[var(--accent)] flex items-center justify-between hover:text-[var(--accent-glow)]"
+        >
+          <span>📷 {t("reports.vision.section")}</span>
+          <span className="text-base">{visionOpen ? "−" : "+"}</span>
+        </button>
+        {visionOpen && (
+          <div className="mt-4 space-y-3">
+            <p className="text-xs text-[var(--muted)]">{t("reports.vision.help")}</p>
+            <input
+              ref={visionFileRef}
+              type="file"
+              accept="image/png,image/jpeg,image/webp,image/gif"
+              className="block w-full text-xs text-[var(--muted)] file:mr-3 file:border-0 file:bg-[var(--surface)] file:px-3 file:py-1.5 file:text-xs file:text-[var(--foreground)] hover:file:bg-[var(--accent)] hover:file:text-[var(--background)]"
+            />
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={visionName}
+                onChange={(e) => setVisionName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    handleAnalyzeVision();
+                  }
+                }}
+                maxLength={60}
+                placeholder={t("reports.vision.name.placeholder")}
+                className="flex-1 text-xs px-2 py-1.5 border border-[var(--line)] bg-[var(--surface)] focus:border-[var(--accent)] focus:outline-none"
+              />
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  handleAnalyzeVision();
+                }}
+                disabled={visionPending}
+                className="text-xs px-3 py-1.5 bg-[var(--accent)] text-[var(--background)] font-bold hover:bg-[var(--accent-glow)] disabled:opacity-50 inline-flex items-center gap-1.5"
+              >
+                {visionPending ? (
+                  <>
+                    <span className="spinner" />
+                    {t("reports.vision.analyzing")}
+                  </>
+                ) : (
+                  t("reports.vision.upload")
+                )}
+              </button>
+            </div>
+            {visionMsg && (
+              <p className={`text-xs ${visionMsg.kind === "ok" ? "text-[var(--accent)]" : "text-red-400"}`}>
+                {visionMsg.text}
+              </p>
+            )}
+          </div>
+        )}
       </div>
 
       {errorText && <p className="text-sm text-red-400">{errorText}</p>}
