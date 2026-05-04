@@ -86,13 +86,15 @@ export async function generateReport(
   if (!brand) return { error: "品牌不存在或無權限" };
 
   // Apply custom style analysis if specified
+  let styleColors: unknown = null;
   if (customStyleId) {
     const { data: customStyle } = await supabase
       .from("custom_styles")
-      .select("analysis")
+      .select("analysis, colors")
       .eq("id", customStyleId)
       .single();
     if (customStyle?.analysis) opts.customStyleAnalysis = customStyle.analysis;
+    if (customStyle?.colors) styleColors = customStyle.colors;
   }
 
   let chunks;
@@ -188,6 +190,7 @@ export async function generateReport(
       citations,
       focus: opts.focus || null,
       style: opts.style ?? null,
+      style_colors: styleColors,
     })
     .select("id")
     .single();
@@ -359,9 +362,11 @@ export async function analyzeReferenceStyle(
     .catch(() => null);
 
   let analysis: string;
+  let colors: unknown = null;
   try {
     const result = await analyzeStyleFromImage(buffer, file.type);
     analysis = result.analysis;
+    colors = result.colors;
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Vision 分析失敗" };
   }
@@ -373,6 +378,7 @@ export async function analyzeReferenceStyle(
       user_id: user.id,
       name: name.slice(0, 60),
       analysis,
+      colors,
       preview_path: previewPath,
     })
     .select("id")
