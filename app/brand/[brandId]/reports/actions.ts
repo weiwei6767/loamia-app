@@ -10,6 +10,10 @@ import {
   listBrandDocuments,
   generateReportFromChunks,
   makeAutoTitle,
+  type Tone,
+  type Length,
+  type Lang,
+  type ReportOptions,
 } from "@/lib/ai/report";
 
 export type GenerateState =
@@ -18,17 +22,47 @@ export type GenerateState =
   | {
       needsSelection: true;
       focus: string;
+      sections: string;
+      tone: Tone;
+      length: Length;
+      lang: Lang;
       documents: { id: string; filename: string }[];
     };
+
+const TONES: Tone[] = ["professional", "business", "client", "internal", "casual", "data"];
+const LENGTHS: Length[] = ["short", "standard", "detailed"];
+const LANGS: Lang[] = ["zh", "en"];
+
+function parseOptions(formData: FormData): ReportOptions {
+  const focus = String(formData.get("focus") ?? "").trim();
+  const sectionsRaw = String(formData.get("sections") ?? "").trim();
+  const sections = sectionsRaw
+    .split(/\r?\n/)
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .slice(0, 12);
+
+  const toneRaw = String(formData.get("tone") ?? "professional");
+  const tone = (TONES as string[]).includes(toneRaw) ? (toneRaw as Tone) : "professional";
+
+  const lengthRaw = String(formData.get("length") ?? "standard");
+  const length = (LENGTHS as string[]).includes(lengthRaw) ? (lengthRaw as Length) : "standard";
+
+  const langRaw = String(formData.get("lang") ?? "zh");
+  const lang = (LANGS as string[]).includes(langRaw) ? (langRaw as Lang) : "zh";
+
+  return { focus, sections, tone, length, lang };
+}
 
 export async function generateReport(
   _state: GenerateState,
   formData: FormData
 ): Promise<GenerateState> {
   const brandId = String(formData.get("brandId") ?? "");
-  const focus = String(formData.get("focus") ?? "").trim();
   const selectedDocIds = formData.getAll("docId").map(String).filter(Boolean);
   if (!brandId) return { error: "missing brandId" };
+
+  const opts = parseOptions(formData);
 
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -47,13 +81,17 @@ export async function generateReport(
       chunks = await fetchChunksByDocs(brand.id, selectedDocIds);
       if (chunks.length === 0) return { error: "選的文件中沒有可用內容" };
     } else {
-      chunks = await retrieveRelevantChunks(brand.id, focus, 50);
+      chunks = await retrieveRelevantChunks(brand.id, opts.focus, opts.lang, 50);
       if (!isRelevant(chunks)) {
         const documents = await listBrandDocuments(brand.id);
         if (documents.length === 0) return { error: "no_documents" };
         return {
           needsSelection: true,
-          focus,
+          focus: opts.focus,
+          sections: opts.sections.join("\n"),
+          tone: opts.tone,
+          length: opts.length,
+          lang: opts.lang,
           documents: documents.map((d) => ({ id: d.id, filename: d.filename })),
         };
       }
@@ -65,14 +103,14 @@ export async function generateReport(
   let content: string;
   let citations: unknown;
   try {
-    const result = await generateReportFromChunks(brand.name, focus, chunks);
+    const result = await generateReportFromChunks(brand.name, chunks, opts);
     content = result.content;
     citations = result.citations;
   } catch (err) {
     return { error: err instanceof Error ? err.message : "生成失敗" };
   }
 
-  const title = makeAutoTitle(brand.name, focus);
+  const title = makeAutoTitle(brand.name, opts.focus, opts.lang);
 
   const { data: report, error: insertErr } = await supabase
     .from("brand_reports")
@@ -83,7 +121,7 @@ export async function generateReport(
       title,
       content,
       citations,
-      focus: focus || null,
+      focus: opts.focus || null,
     })
     .select("id")
     .single();
