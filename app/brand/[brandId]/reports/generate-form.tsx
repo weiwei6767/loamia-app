@@ -455,7 +455,31 @@ export function GenerateForm({
       />
     )}
 
+    <DocsUploadSection brandId={brandId} />
     <VisionUpload brandId={brandId} />
+    </div>
+  );
+}
+
+function DocsUploadSection({ brandId }: { brandId: string }) {
+  const { t } = useI18n();
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="border border-[var(--line)] bg-[var(--surface)] p-4">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="w-full text-left text-xs font-mono tracking-widest text-[var(--accent)] flex items-center justify-between hover:text-[var(--accent-glow)]"
+      >
+        <span>📄 {t("reports.docs.upload")}</span>
+        <span className="text-base">{open ? "−" : "+"}</span>
+      </button>
+      {open && (
+        <div className="mt-4 space-y-2">
+          <p className="text-xs text-[var(--muted)]">{t("reports.docs.help")}</p>
+          <Uploader brandId={brandId} />
+        </div>
+      )}
     </div>
   );
 }

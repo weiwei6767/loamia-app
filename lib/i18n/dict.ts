@@ -163,6 +163,8 @@ export const dict = {
   "reports.vision.upload": { zh: "分析並儲存", en: "Analyze & save" },
   "reports.vision.success": { zh: "風格已儲存", en: "Style saved" },
   "reports.vision.delete.confirm": { zh: "刪除這個自訂風格？", en: "Delete this custom style?" },
+  "reports.docs.upload": { zh: "上傳新資料文件", en: "Upload new data document" },
+  "reports.docs.help": { zh: "上傳資料給 Brand GPT 與報表使用（PDF / DOCX / TXT）", en: "Add documents for Brand GPT and reports (PDF / DOCX / TXT)" },
 
   // Settings
   "settings.label": { zh: "設定", en: "Settings" },
