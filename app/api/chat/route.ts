@@ -118,10 +118,12 @@ export async function POST(req: NextRequest) {
 
         let fullText = "";
         for await (const event of stream) {
-          if (event.type === "content_block_delta" && event.delta.type === "text_delta") {
-            fullText += event.delta.text;
-            controller.enqueue(ndjson({ type: "text", delta: event.delta.text }));
-          }
+          if (event.type !== "content_block_delta") continue;
+          if (event.delta?.type !== "text_delta") continue;
+          const text = event.delta.text;
+          if (!text) continue;
+          fullText += text;
+          controller.enqueue(ndjson({ type: "text", delta: text }));
         }
 
         // Persist assistant message
