@@ -214,13 +214,24 @@ export function GenerateForm({
               type="text"
               value={presetName}
               onChange={(e) => setPresetName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  handleSavePreset();
+                }
+              }}
               maxLength={60}
               placeholder={t("reports.section_preset.name.placeholder")}
               className="text-xs px-2 py-1 w-44 border border-[var(--line)] bg-[var(--surface-2)] focus:border-[var(--accent)] focus:outline-none"
             />
             <button
               type="button"
-              onClick={handleSavePreset}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                handleSavePreset();
+              }}
               disabled={presetPending}
               className="text-xs px-3 py-1 border border-l-0 border-[var(--accent)] bg-[var(--accent)] text-[var(--background)] font-bold hover:bg-[var(--accent-glow)] disabled:opacity-50"
             >
