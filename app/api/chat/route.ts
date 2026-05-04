@@ -95,7 +95,7 @@ export async function POST(req: NextRequest) {
 
   const systemPrompt = buildSystemPrompt(brand.name, citations);
 
-  const stream = await anthropic.messages.stream({
+  const stream = await anthropic().messages.stream({
     model: CHAT_MODEL,
     max_tokens: 2048,
     system: systemPrompt,
