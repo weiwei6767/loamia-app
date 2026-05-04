@@ -146,6 +146,9 @@ export const dict = {
   "reports.section_preset.delete.confirm": { zh: "確定刪除這個段落模板？", en: "Delete this section preset?" },
   "reports.section_preset.system": { zh: "系統", en: "System" },
   "reports.section_preset.mine": { zh: "我的", en: "Mine" },
+  "reports.export.pdf": { zh: "另存為 PDF", en: "Save as PDF" },
+  "reports.export.docx": { zh: "下載 DOCX", en: "Download DOCX" },
+  "reports.export.print_hint": { zh: "(瀏覽器列印對話框 → 目的地選「另存為 PDF」)", en: "(Browser print dialog → destination: Save as PDF)" },
 
   // Settings
   "settings.label": { zh: "設定", en: "Settings" },

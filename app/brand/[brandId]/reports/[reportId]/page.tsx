@@ -5,6 +5,7 @@ import remarkGfm from "remark-gfm";
 import { createClient } from "@/lib/supabase/server";
 import { getServerT } from "@/lib/i18n/server";
 import { DeleteButton } from "./delete-button";
+import { ExportButtons } from "./export-buttons";
 import { STYLES, isValidStyle } from "@/lib/ai/styles";
 
 type Citation = {
@@ -57,15 +58,16 @@ export default async function ReportDetailPage({
 
   return (
     <main className="min-h-screen flex flex-col">
-      <header className="border-b border-[var(--line)]">
-        <div className="mx-auto max-w-3xl flex items-center justify-between px-4 md:px-6 py-4 gap-4">
+      <header className="border-b border-[var(--line)] no-print">
+        <div className="mx-auto max-w-3xl flex items-center justify-between px-4 md:px-6 py-4 gap-4 flex-wrap">
           <Link
             href={`/brand/${brand.id}/reports`}
             className="text-xs text-[var(--muted)] hover:text-[var(--foreground)]"
           >
             {t("reports.back")}
           </Link>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 flex-wrap">
+            <ExportButtons reportId={report.id} />
             {styleDef && (
               <span
                 className="text-xs px-2 py-1 border"
