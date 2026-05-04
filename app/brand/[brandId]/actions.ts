@@ -126,6 +126,33 @@ export async function deleteDocument(documentId: string, brandId: string) {
   }
   await supabase.from("documents").delete().eq("id", documentId);
   revalidatePath(`/brand/${brandId}`);
+  revalidatePath(`/brand/${brandId}/data`);
+}
+
+export async function deleteDocumentsBatch(documentIds: string[], brandId: string) {
+  if (documentIds.length === 0) return;
+  const supabase = await createClient();
+
+  const { data: docs } = await supabase
+    .from("documents")
+    .select("id, storage_path")
+    .in("id", documentIds);
+
+  if (docs && docs.length > 0) {
+    const paths = docs
+      .map((d) => d.storage_path as string | null)
+      .filter((p): p is string => Boolean(p));
+    if (paths.length > 0) {
+      await supabase.storage.from("documents").remove(paths);
+    }
+    await supabase
+      .from("documents")
+      .delete()
+      .in("id", docs.map((d) => d.id as string));
+  }
+
+  revalidatePath(`/brand/${brandId}`);
+  revalidatePath(`/brand/${brandId}/data`);
 }
 
 export async function deleteThread(threadId: string, brandId: string) {

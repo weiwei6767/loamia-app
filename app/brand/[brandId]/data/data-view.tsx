@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { uploadDocument, deleteDocument } from "../actions";
+import { uploadDocument, deleteDocument, deleteDocumentsBatch } from "../actions";
 import { useI18n } from "@/lib/i18n/provider";
 
 type Doc = {
@@ -47,7 +47,8 @@ export function DataView({ brandId, documents }: { brandId: string; documents: D
   const [uploading, setUploading] = useState(false);
   const [showList, setShowList] = useState(false);
   const [search, setSearch] = useState("");
-  const [, startTransition] = useTransition();
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [pending, startTransition] = useTransition();
 
   const stats = {
     total: documents.length,
@@ -138,6 +139,31 @@ export function DataView({ brandId, documents }: { brandId: string; documents: D
   function handleDelete(docId: string) {
     if (!confirm("確定刪除這個文件？")) return;
     startTransition(() => deleteDocument(docId, brandId));
+  }
+
+  function toggleSelect(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleSelectAll() {
+    if (selected.size === filteredDocs.length && filteredDocs.length > 0) {
+      setSelected(new Set());
+    } else {
+      setSelected(new Set(filteredDocs.map((d) => d.id)));
+    }
+  }
+
+  function handleBatchDelete() {
+    if (selected.size === 0) return;
+    if (!confirm(t("data.list.delete_confirm"))) return;
+    const ids = Array.from(selected);
+    setSelected(new Set());
+    startTransition(() => deleteDocumentsBatch(ids, brandId));
   }
 
   return (
@@ -261,6 +287,40 @@ export function DataView({ brandId, documents }: { brandId: string; documents: D
               placeholder={t("data.list.search")}
               className="w-full text-sm px-3 py-2 border border-[var(--line)] bg-[var(--surface-2)] focus:border-[var(--accent)] focus:outline-none"
             />
+
+            {filteredDocs.length > 0 && (
+              <div className="flex items-center justify-between gap-2 py-1.5 px-2 border border-[var(--line)] bg-[var(--surface-2)]">
+                <label className="flex items-center gap-2 text-xs text-[var(--muted)] cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={selected.size === filteredDocs.length && filteredDocs.length > 0}
+                    ref={(el) => {
+                      if (el)
+                        el.indeterminate =
+                          selected.size > 0 && selected.size < filteredDocs.length;
+                    }}
+                    onChange={toggleSelectAll}
+                    className="accent-[var(--accent)]"
+                  />
+                  <span>
+                    {selected.size > 0
+                      ? `${t("data.list.deselect")} (${selected.size})`
+                      : t("data.list.select_all")}
+                  </span>
+                </label>
+                {selected.size > 0 && (
+                  <button
+                    type="button"
+                    onClick={handleBatchDelete}
+                    disabled={pending}
+                    className="text-xs px-2 py-1 border border-red-400/40 text-red-400 hover:bg-red-400 hover:text-[var(--background)] transition disabled:opacity-50"
+                  >
+                    {pending ? <span className="spinner" /> : `✕ ${t("data.list.delete_selected")} (${selected.size})`}
+                  </button>
+                )}
+              </div>
+            )}
+
             {filteredDocs.length === 0 ? (
               <p className="text-sm text-[var(--muted)] py-4 text-center">—</p>
             ) : (
@@ -268,8 +328,19 @@ export function DataView({ brandId, documents }: { brandId: string; documents: D
                 {filteredDocs.map((d) => (
                   <li
                     key={d.id}
-                    className="border border-[var(--line)] bg-[var(--surface-2)] p-3 flex items-start justify-between gap-3"
+                    className={`border bg-[var(--surface-2)] p-3 flex items-start gap-3 transition ${
+                      selected.has(d.id)
+                        ? "border-[var(--accent)]"
+                        : "border-[var(--line)]"
+                    }`}
                   >
+                    <input
+                      type="checkbox"
+                      checked={selected.has(d.id)}
+                      onChange={() => toggleSelect(d.id)}
+                      className="accent-[var(--accent)] mt-1 shrink-0"
+                      aria-label={`select ${d.filename}`}
+                    />
                     <div className="min-w-0 flex-1">
                       <div className="truncate font-medium text-sm">{d.filename}</div>
                       <div className="mt-1 text-xs text-[var(--muted)] flex items-center gap-2 font-mono">
@@ -277,6 +348,8 @@ export function DataView({ brandId, documents }: { brandId: string; documents: D
                         <span>{statusLabel(d.status, t)}</span>
                         <span>·</span>
                         <span>{formatSize(d.byte_size)}</span>
+                        <span>·</span>
+                        <span>{new Date(d.created_at).toLocaleDateString()}</span>
                       </div>
                       {d.error_message && (
                         <div className="mt-1 text-xs text-red-400 break-words">{d.error_message}</div>
