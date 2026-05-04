@@ -87,6 +87,7 @@ export function GenerateForm({
   const [presetMsg, setPresetMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
   const [presetPending, setPresetPending] = useState(false);
   const [activePreset, setActivePreset] = useState<string | null>("system:standard");
+  const [advancedOpen, setAdvancedOpen] = useState(false);
   const router = useRouter();
 
   // Vision upload (inline, between style picker and generate button)
@@ -365,23 +366,8 @@ export function GenerateForm({
         </div>
       </div>
 
-      {/* Period filter */}
-      <div>
-        <label htmlFor="period" className="mb-1.5 block text-xs font-medium tracking-wide text-[var(--muted)]">
-          {t("reports.period.label")}
-        </label>
-        <input
-          id="period"
-          name="period"
-          type="text"
-          value={period}
-          onChange={(e) => setPeriod(e.target.value)}
-          maxLength={20}
-          placeholder={t("reports.period.placeholder")}
-          className="w-full sm:w-48 border border-[var(--line)] bg-[var(--surface-2)] px-3 py-2 text-sm focus:border-[var(--accent)] focus:outline-none"
-        />
-        <p className="mt-1 text-xs text-[var(--muted)]">{t("reports.period.hint")}</p>
-      </div>
+      {/* Period filter is now hidden by default in Advanced section below */}
+      <input type="hidden" name="period" value={period} />
 
       {/* Style picker */}
       <div>
@@ -517,6 +503,45 @@ export function GenerateForm({
 
       {errorText && <p className="text-sm text-red-400">{errorText}</p>}
 
+      {/* Advanced section — period filter + save template */}
+      <div className="border-t border-[var(--line)] pt-4">
+        <button
+          type="button"
+          onClick={() => setAdvancedOpen((v) => !v)}
+          className="text-xs font-mono tracking-widest text-[var(--muted)] hover:text-[var(--foreground)] flex items-center gap-1.5"
+        >
+          <span>{advancedOpen ? "▼" : "▶"}</span>
+          {t("reports.advanced")}
+        </button>
+        {advancedOpen && (
+          <div className="mt-4 space-y-4 pl-1">
+            <div>
+              <label htmlFor="period" className="mb-1.5 block text-xs font-medium tracking-wide text-[var(--muted)]">
+                {t("reports.period.label")}
+              </label>
+              <input
+                id="period"
+                type="text"
+                value={period}
+                onChange={(e) => setPeriod(e.target.value)}
+                maxLength={20}
+                placeholder={t("reports.period.placeholder")}
+                className="w-full sm:w-48 border border-[var(--line)] bg-[var(--surface-2)] px-3 py-2 text-sm focus:border-[var(--accent)] focus:outline-none"
+              />
+              <p className="mt-1 text-xs text-[var(--muted)]">{t("reports.period.hint")}</p>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setShowSave((v) => !v)}
+              className="text-xs px-3 py-2 border border-[var(--line)] hover:border-[var(--accent)] text-[var(--muted)] hover:text-[var(--foreground)]"
+            >
+              {showSave ? t("reports.template.cancel") : `+ ${t("reports.template.save")}`}
+            </button>
+          </div>
+        )}
+      </div>
+
       <div className="flex flex-wrap gap-3 items-start">
         <button
           type="submit"
@@ -531,14 +556,6 @@ export function GenerateForm({
           ) : (
             <>+ {t("reports.generate")}</>
           )}
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setShowSave((v) => !v)}
-          className="text-xs px-3 py-2 border border-[var(--line)] hover:border-[var(--accent)] text-[var(--muted)] hover:text-[var(--foreground)]"
-        >
-          {showSave ? t("reports.template.cancel") : `+ ${t("reports.template.save")}`}
         </button>
       </div>
 

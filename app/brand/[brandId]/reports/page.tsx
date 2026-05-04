@@ -3,6 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getServerT } from "@/lib/i18n/server";
 import { GenerateForm } from "./generate-form";
+import { ReportsList } from "./reports-list";
 
 export default async function ReportsPage({
   params,
@@ -101,27 +102,11 @@ export default async function ReportsPage({
           customStyles={customStyles ?? []}
         />
 
-        <div className="mt-10">
-          {(!reports || reports.length === 0) ? (
-            <p className="text-sm text-[var(--muted)]">{t("reports.empty")}</p>
-          ) : (
-            <ul className="space-y-2">
-              {reports.map((r) => (
-                <li key={r.id}>
-                  <Link
-                    href={`/brand/${brand.id}/reports/${r.id}`}
-                    className="block border border-[var(--line)] bg-[var(--surface)] p-4 transition hover:border-[var(--accent)]/50"
-                  >
-                    <div className="font-medium">{r.title}</div>
-                    <div className="mt-1 text-xs text-[var(--muted)] flex items-center gap-3">
-                      <span>{new Date(r.created_at).toLocaleString()}</span>
-                      {r.focus && <span>· {r.focus}</span>}
-                    </div>
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          )}
+        <div className="mt-12">
+          <h3 className="font-mono text-xs tracking-widest text-[var(--muted)] mb-4">
+            HISTORY · {reports?.length ?? 0}
+          </h3>
+          <ReportsList brandId={brand.id} reports={reports ?? []} />
         </div>
       </section>
     </main>
