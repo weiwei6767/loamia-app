@@ -1,9 +1,16 @@
 "use client";
 
-import { useActionState, useState } from "react";
-import { generateReport, type GenerateState } from "./actions";
+import { useActionState, useState, useTransition } from "react";
+import {
+  generateReport,
+  saveTemplate,
+  deleteTemplate,
+  type GenerateState,
+  type SaveTemplateState,
+} from "./actions";
 import { useI18n } from "@/lib/i18n/provider";
 import { Uploader } from "../uploader";
+import { STYLES, STYLE_KEYS, type StyleKey } from "@/lib/ai/styles";
 
 const SECTION_TEMPLATES: Record<string, { zh: string; en: string }> = {
   standard: {
@@ -24,7 +31,23 @@ const SECTION_TEMPLATES: Record<string, { zh: string; en: string }> = {
   },
 };
 
-export function GenerateForm({ brandId }: { brandId: string }) {
+export type SavedTemplate = {
+  id: string;
+  name: string;
+  sections: string[];
+  tone: string | null;
+  length: string | null;
+  lang: string | null;
+  style: string | null;
+};
+
+export function GenerateForm({
+  brandId,
+  templates,
+}: {
+  brandId: string;
+  templates: SavedTemplate[];
+}) {
   const { t, locale } = useI18n();
   const [state, action, pending] = useActionState<GenerateState, FormData>(generateReport, undefined);
 
@@ -35,7 +58,8 @@ export function GenerateForm({ brandId }: { brandId: string }) {
   const [tone, setTone] = useState("professional");
   const [length, setLength] = useState("standard");
   const [lang, setLang] = useState<"zh" | "en">(locale);
-  const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [style, setStyle] = useState<StyleKey | "">("");
+  const [showSave, setShowSave] = useState(false);
 
   const errorText = (() => {
     if (!state || !("error" in state) || !state.error) return null;
@@ -47,13 +71,43 @@ export function GenerateForm({ brandId }: { brandId: string }) {
     return <Picker brandId={brandId} state={state} action={action} pending={pending} />;
   }
 
-  const setTemplate = (key: keyof typeof SECTION_TEMPLATES) => {
+  const setQuickTemplate = (key: keyof typeof SECTION_TEMPLATES) => {
     setSections(SECTION_TEMPLATES[key][lang]);
+  };
+
+  const loadTemplate = (id: string) => {
+    if (!id) return;
+    const tpl = templates.find((x) => x.id === id);
+    if (!tpl) return;
+    setSections(tpl.sections.join("\n"));
+    if (tpl.tone) setTone(tpl.tone);
+    if (tpl.length) setLength(tpl.length);
+    if (tpl.lang === "zh" || tpl.lang === "en") setLang(tpl.lang);
+    if (tpl.style && tpl.style in STYLES) setStyle(tpl.style as StyleKey);
+    else setStyle("");
   };
 
   return (
     <form action={action} className="border border-[var(--line)] bg-[var(--surface)] p-5 space-y-5">
       <input type="hidden" name="brandId" value={brandId} />
+
+      {/* Saved templates dropdown */}
+      <div className="flex flex-wrap items-center gap-2 pb-3 border-b border-[var(--line)]">
+        <span className="text-xs font-medium tracking-wide text-[var(--muted)]">
+          {t("reports.template.load")}：
+        </span>
+        <select
+          onChange={(e) => loadTemplate(e.target.value)}
+          defaultValue=""
+          className="text-xs border border-[var(--line)] bg-[var(--surface-2)] px-2 py-1 focus:border-[var(--accent)] focus:outline-none"
+        >
+          <option value="">— {t("reports.template.empty")} —</option>
+          {templates.map((tp) => (
+            <option key={tp.id} value={tp.id}>{tp.name}</option>
+          ))}
+        </select>
+        <ManageTemplates templates={templates} brandId={brandId} />
+      </div>
 
       <div>
         <label htmlFor="focus" className="mb-1.5 block text-xs font-medium tracking-wide text-[var(--muted)]">
@@ -83,7 +137,7 @@ export function GenerateForm({ brandId }: { brandId: string }) {
             <button
               key={k}
               type="button"
-              onClick={() => setTemplate(k)}
+              onClick={() => setQuickTemplate(k)}
               className="text-xs px-2.5 py-1 border border-[var(--line)] bg-[var(--surface-2)] hover:border-[var(--accent)] hover:text-[var(--accent)] transition"
             >
               {t(`reports.sections.template.${k}` as never)}
@@ -155,28 +209,200 @@ export function GenerateForm({ brandId }: { brandId: string }) {
         </div>
       </div>
 
+      {/* Style picker */}
+      <div>
+        <label className="mb-2 block text-xs font-medium tracking-wide text-[var(--muted)]">
+          {t("reports.style.label")}
+        </label>
+        <input type="hidden" name="style" value={style} />
+        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2">
+          <button
+            type="button"
+            onClick={() => setStyle("")}
+            className={`relative aspect-[8/5] border text-xs flex items-center justify-center transition ${
+              style === ""
+                ? "border-[var(--accent)] ring-2 ring-[var(--accent)]/30"
+                : "border-[var(--line)] hover:border-[var(--accent)]/50"
+            } bg-[var(--surface-2)]`}
+          >
+            <span className="text-[var(--muted)]">{t("reports.style.none")}</span>
+          </button>
+          {STYLE_KEYS.map((k) => {
+            const s = STYLES[k];
+            const active = style === k;
+            return (
+              <button
+                key={k}
+                type="button"
+                onClick={() => setStyle(k)}
+                className={`relative aspect-[8/5] border overflow-hidden transition ${
+                  active
+                    ? "border-[var(--accent)] ring-2 ring-[var(--accent)]/30"
+                    : "border-[var(--line)] hover:border-[var(--accent)]/50"
+                }`}
+                title={s.desc[lang]}
+              >
+                <span
+                  className="block w-full h-full"
+                  dangerouslySetInnerHTML={{ __html: s.preview }}
+                />
+                <span className="absolute bottom-0 left-0 right-0 bg-[var(--surface)]/95 text-[10px] px-1 py-0.5 text-center truncate">
+                  {t(`reports.style.${k}` as never)}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
       {errorText && <p className="text-sm text-red-400">{errorText}</p>}
 
-      <button
-        type="submit"
-        disabled={pending}
-        className="w-full sm:w-auto bg-[var(--accent)] px-6 py-3 text-sm font-bold tracking-wide text-[var(--background)] transition hover:bg-[var(--accent-glow)] disabled:opacity-50 inline-flex items-center justify-center gap-2"
-      >
-        {pending ? (
-          <>
-            <span className="spinner" />
-            {t("reports.generating")}
-          </>
-        ) : (
-          <>+ {t("reports.generate")}</>
-        )}
-      </button>
+      <div className="flex flex-wrap gap-3 items-start">
+        <button
+          type="submit"
+          disabled={pending}
+          className="bg-[var(--accent)] px-6 py-3 text-sm font-bold tracking-wide text-[var(--background)] transition hover:bg-[var(--accent-glow)] disabled:opacity-50 inline-flex items-center justify-center gap-2"
+        >
+          {pending ? (
+            <>
+              <span className="spinner" />
+              {t("reports.generating")}
+            </>
+          ) : (
+            <>+ {t("reports.generate")}</>
+          )}
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setShowSave((v) => !v)}
+          className="text-xs px-3 py-2 border border-[var(--line)] hover:border-[var(--accent)] text-[var(--muted)] hover:text-[var(--foreground)]"
+        >
+          {showSave ? t("reports.template.cancel") : `+ ${t("reports.template.save")}`}
+        </button>
+      </div>
+
+      {showSave && (
+        <SaveTemplateInline
+          brandId={brandId}
+          opts={{ focus, sections, tone, length, lang, style }}
+          onDone={() => setShowSave(false)}
+        />
+      )}
+
       {pending && (
         <p className="text-xs text-[var(--muted)]">
           (生成需要 30 秒到 2 分鐘，請耐心等待)
         </p>
       )}
     </form>
+  );
+}
+
+function SaveTemplateInline({
+  brandId,
+  opts,
+  onDone,
+}: {
+  brandId: string;
+  opts: {
+    focus: string;
+    sections: string;
+    tone: string;
+    length: string;
+    lang: string;
+    style: string;
+  };
+  onDone: () => void;
+}) {
+  const { t } = useI18n();
+  const [state, action, pending] = useActionState<SaveTemplateState, FormData>(saveTemplate, undefined);
+
+  if (state && "success" in state && state.success) {
+    setTimeout(onDone, 800);
+  }
+
+  return (
+    <form action={action} className="p-3 border border-[var(--accent)]/40 bg-[var(--surface-2)] flex flex-wrap items-center gap-2">
+      <input type="hidden" name="brandId" value={brandId} />
+      <input type="hidden" name="focus" value={opts.focus} />
+      <input type="hidden" name="sections" value={opts.sections} />
+      <input type="hidden" name="tone" value={opts.tone} />
+      <input type="hidden" name="length" value={opts.length} />
+      <input type="hidden" name="lang" value={opts.lang} />
+      <input type="hidden" name="style" value={opts.style} />
+
+      <input
+        name="templateName"
+        type="text"
+        required
+        maxLength={60}
+        placeholder={t("reports.template.name.placeholder")}
+        className="flex-1 min-w-[200px] border border-[var(--line)] bg-[var(--surface)] px-3 py-2 text-sm focus:border-[var(--accent)] focus:outline-none"
+      />
+      <button
+        type="submit"
+        disabled={pending}
+        className="bg-[var(--accent)] px-4 py-2 text-xs font-bold tracking-wide text-[var(--background)] hover:bg-[var(--accent-glow)] disabled:opacity-50"
+      >
+        {pending ? "..." : t("reports.template.save.confirm")}
+      </button>
+      {state && "error" in state && state.error && (
+        <span className="w-full text-xs text-red-400">{state.error}</span>
+      )}
+      {state && "success" in state && state.success && (
+        <span className="w-full text-xs text-[var(--accent)]">{state.success}</span>
+      )}
+    </form>
+  );
+}
+
+function ManageTemplates({
+  templates,
+  brandId,
+}: {
+  templates: SavedTemplate[];
+  brandId: string;
+}) {
+  const { t } = useI18n();
+  const [open, setOpen] = useState(false);
+  const [pending, startTransition] = useTransition();
+
+  if (templates.length === 0) return null;
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="text-xs text-[var(--muted)] hover:text-[var(--foreground)] underline"
+      >
+        {open ? t("reports.template.cancel") : "管理"}
+      </button>
+      {open && (
+        <ul className="w-full mt-2 space-y-1">
+          {templates.map((tp) => (
+            <li
+              key={tp.id}
+              className="flex items-center justify-between gap-2 text-xs border border-[var(--line)] bg-[var(--surface-2)] px-3 py-2"
+            >
+              <span className="truncate">{tp.name}</span>
+              <button
+                type="button"
+                disabled={pending}
+                onClick={() => {
+                  if (!confirm(t("reports.template.delete.confirm"))) return;
+                  startTransition(() => deleteTemplate(tp.id, brandId));
+                }}
+                className="text-[var(--muted)] hover:text-red-400 disabled:opacity-50"
+              >
+                ✕
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </>
   );
 }
 
@@ -223,6 +449,7 @@ function Picker({
         <input type="hidden" name="tone" value={state.tone} />
         <input type="hidden" name="length" value={state.length} />
         <input type="hidden" name="lang" value={state.lang} />
+        <input type="hidden" name="style" value={state.style} />
 
         <div>
           <div className="text-xs font-medium tracking-wide text-[var(--muted)] mb-2">

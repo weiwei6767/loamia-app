@@ -2,6 +2,7 @@ import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { anthropic, CHAT_MODEL } from "./anthropic";
 import { embed } from "./embeddings";
+import { getStyleHint, type StyleKey } from "./styles";
 
 export type ReportCitation = {
   id: string;
@@ -27,6 +28,7 @@ export type ReportOptions = {
   tone: Tone;
   length: Length;
   lang: Lang;
+  style?: StyleKey;
 };
 
 const RELEVANCE_THRESHOLD = 0.3;
@@ -150,12 +152,13 @@ export async function listBrandDocuments(brandId: string) {
 }
 
 function buildPrompt(brandName: string, chunks: RetrievedChunk[], opts: ReportOptions): string {
-  const { focus, sections, tone, length, lang } = opts;
+  const { focus, sections, tone, length, lang, style } = opts;
   const sectionList = sections.length > 0 ? sections : DEFAULT_SECTIONS[lang];
   const sectionInstructions = sectionList.map((s, i) => `${i + 1}. **${s}**`).join("\n");
 
   const contextBlock = chunks.map((c, i) => `[${i + 1}] ${c.content}`).join("\n\n---\n\n");
   const focusLine = focus.trim() ? `\n\n【使用者主題重點】${focus.trim()}\n` : "";
+  const styleHint = getStyleHint(style, lang);
 
   if (lang === "en") {
     return `You are Loamia's report-generation assistant. Based on the brand data below, produce a structured closure report for "${brandName}".
@@ -166,7 +169,7 @@ function buildPrompt(brandName: string, chunks: RetrievedChunk[], opts: ReportOp
 ${sectionList.map((s) => `## ${s}\n(write content for this section)`).join("\n\n")}
 
 ## Style
-${TONE_INSTRUCTIONS[tone].en}
+${TONE_INSTRUCTIONS[tone].en}${styleHint ? `\n${styleHint}` : ""}
 
 ## Length
 ${LENGTH_HINT[length].en}
@@ -191,7 +194,7 @@ ${sectionList.map((s) => `## ${s}\n（這段請寫對應內容）`).join("\n\n")
 依序對應上方段落，每段一個 H2。
 
 ## 寫作風格
-${TONE_INSTRUCTIONS[tone].zh}
+${TONE_INSTRUCTIONS[tone].zh}${styleHint ? `\n${styleHint}` : ""}
 
 ## 長度
 ${LENGTH_HINT[length].zh}

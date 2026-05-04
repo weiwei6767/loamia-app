@@ -21,11 +21,17 @@ export default async function ReportsPage({
     .single();
   if (!brand) notFound();
 
-  const { data: reports } = await supabase
-    .from("brand_reports")
-    .select("id, title, focus, created_at")
-    .eq("brand_id", brand.id)
-    .order("created_at", { ascending: false });
+  const [{ data: reports }, { data: templates }] = await Promise.all([
+    supabase
+      .from("brand_reports")
+      .select("id, title, focus, created_at")
+      .eq("brand_id", brand.id)
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("report_templates")
+      .select("id, name, sections, tone, length, lang, style")
+      .order("created_at", { ascending: false }),
+  ]);
 
   const t = await getServerT();
 
@@ -73,7 +79,7 @@ export default async function ReportsPage({
           <p className="mt-2 text-sm text-[var(--muted)]">{t("reports.subtitle")}</p>
         </div>
 
-        <GenerateForm brandId={brand.id} />
+        <GenerateForm brandId={brand.id} templates={templates ?? []} />
 
         <div className="mt-10">
           {(!reports || reports.length === 0) ? (

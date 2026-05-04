@@ -15,6 +15,7 @@ import {
   type Lang,
   type ReportOptions,
 } from "@/lib/ai/report";
+import { isValidStyle, type StyleKey } from "@/lib/ai/styles";
 
 export type GenerateState =
   | undefined
@@ -26,6 +27,7 @@ export type GenerateState =
       tone: Tone;
       length: Length;
       lang: Lang;
+      style: StyleKey | "";
       documents: { id: string; filename: string }[];
     };
 
@@ -51,7 +53,10 @@ function parseOptions(formData: FormData): ReportOptions {
   const langRaw = String(formData.get("lang") ?? "zh");
   const lang = (LANGS as string[]).includes(langRaw) ? (langRaw as Lang) : "zh";
 
-  return { focus, sections, tone, length, lang };
+  const styleRaw = String(formData.get("style") ?? "");
+  const style: StyleKey | undefined = isValidStyle(styleRaw) ? styleRaw : undefined;
+
+  return { focus, sections, tone, length, lang, style };
 }
 
 export async function generateReport(
@@ -92,6 +97,7 @@ export async function generateReport(
           tone: opts.tone,
           length: opts.length,
           lang: opts.lang,
+          style: opts.style ?? "",
           documents: documents.map((d) => ({ id: d.id, filename: d.filename })),
         };
       }
@@ -122,6 +128,7 @@ export async function generateReport(
       content,
       citations,
       focus: opts.focus || null,
+      style: opts.style ?? null,
     })
     .select("id")
     .single();
@@ -138,4 +145,59 @@ export async function deleteReport(reportId: string, brandId: string) {
   await supabase.from("brand_reports").delete().eq("id", reportId);
   revalidatePath(`/brand/${brandId}/reports`);
   redirect(`/brand/${brandId}/reports`);
+}
+
+// ─── Templates ─────────────────────────────────────
+
+export type SaveTemplateState =
+  | undefined
+  | { error: string }
+  | { success: string };
+
+export async function saveTemplate(
+  _state: SaveTemplateState,
+  formData: FormData
+): Promise<SaveTemplateState> {
+  const name = String(formData.get("templateName") ?? "").trim();
+  if (!name) return { error: "請輸入模板名稱" };
+
+  const opts = parseOptions(formData);
+
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "未登入" };
+
+  const { data: memberships } = await supabase
+    .from("agency_members")
+    .select("agency_id")
+    .limit(1);
+  const agencyId = memberships?.[0]?.agency_id;
+  if (!agencyId) return { error: "no agency" };
+
+  const { error } = await supabase
+    .from("report_templates")
+    .upsert(
+      {
+        agency_id: agencyId,
+        user_id: user.id,
+        name: name.slice(0, 60),
+        sections: opts.sections,
+        tone: opts.tone,
+        length: opts.length,
+        lang: opts.lang,
+        style: opts.style ?? null,
+      },
+      { onConflict: "agency_id,name" }
+    );
+  if (error) return { error: error.message };
+
+  const brandId = String(formData.get("brandId") ?? "");
+  if (brandId) revalidatePath(`/brand/${brandId}/reports`);
+  return { success: `模板「${name}」已儲存` };
+}
+
+export async function deleteTemplate(templateId: string, brandId: string) {
+  const supabase = await createClient();
+  await supabase.from("report_templates").delete().eq("id", templateId);
+  revalidatePath(`/brand/${brandId}/reports`);
 }
