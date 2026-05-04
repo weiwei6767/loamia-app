@@ -1,36 +1,91 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { anthropic, CHAT_MODEL } from "./anthropic";
+import { embed } from "./embeddings";
 
 export type ReportCitation = {
   id: string;
   document_id: string;
   filename: string;
-  chunk_index: number;
 };
 
-export async function generateReportContent(
+export type RetrievedChunk = {
+  id: string;
+  document_id: string;
+  filename: string;
+  content: string;
+  similarity: number;
+};
+
+const RELEVANCE_THRESHOLD = 0.3;
+const TOP_K_DEFAULT_FOCUS = 50;
+const FALLBACK_QUERY = "本期結案報告 月度成效 KPI 重點活動";
+
+export async function retrieveRelevantChunks(
   brandId: string,
-  brandName: string,
-  focus: string
-): Promise<{ content: string; citations: ReportCitation[] }> {
+  focus: string,
+  k = TOP_K_DEFAULT_FOCUS
+): Promise<RetrievedChunk[]> {
+  const query = focus.trim() || FALLBACK_QUERY;
+  const [queryEmbedding] = await embed([query]);
+
   const supabase = await createClient();
+  const { data, error } = await supabase.rpc("match_chunks", {
+    query_embedding: queryEmbedding,
+    target_brand_id: brandId,
+    match_count: k,
+  });
+  if (error) throw new Error(`retrieve: ${error.message}`);
+  return (data ?? []) as RetrievedChunk[];
+}
 
-  const { data: chunks, error } = await supabase
+export async function fetchChunksByDocs(
+  brandId: string,
+  documentIds: string[]
+): Promise<RetrievedChunk[]> {
+  const supabase = await createClient();
+  const { data, error } = await supabase
     .from("document_chunks")
-    .select("id, document_id, chunk_index, content, documents(filename)")
+    .select("id, document_id, content, documents(filename)")
     .eq("brand_id", brandId)
-    .order("created_at", { ascending: false })
-    .limit(120);
-
-  if (error) throw new Error(`load chunks: ${error.message}`);
-  if (!chunks || chunks.length === 0) throw new Error("no_documents");
-
-  const citations: ReportCitation[] = chunks.map((c) => ({
+    .in("document_id", documentIds)
+    .order("chunk_index", { ascending: true })
+    .limit(200);
+  if (error) throw new Error(`fetch chunks by docs: ${error.message}`);
+  return (data ?? []).map((c) => ({
     id: c.id as string,
     document_id: c.document_id as string,
     filename: ((c.documents as unknown as { filename: string })?.filename) ?? "",
-    chunk_index: c.chunk_index as number,
+    content: c.content as string,
+    similarity: 1,
+  }));
+}
+
+export function isRelevant(chunks: RetrievedChunk[]): boolean {
+  if (chunks.length === 0) return false;
+  return chunks[0].similarity >= RELEVANCE_THRESHOLD;
+}
+
+export async function listBrandDocuments(brandId: string) {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("documents")
+    .select("id, filename, status, byte_size, created_at")
+    .eq("brand_id", brandId)
+    .eq("status", "ready")
+    .order("created_at", { ascending: false });
+  return data ?? [];
+}
+
+export async function generateReportFromChunks(
+  brandName: string,
+  focus: string,
+  chunks: RetrievedChunk[]
+): Promise<{ content: string; citations: ReportCitation[] }> {
+  const citations: ReportCitation[] = chunks.map((c) => ({
+    id: c.id,
+    document_id: c.document_id,
+    filename: c.filename,
   }));
 
   const contextBlock = chunks
@@ -41,7 +96,7 @@ export async function generateReportContent(
     ? `\n\n【使用者主題重點】\n${focus.trim()}\n`
     : "";
 
-  const systemPrompt = `你是 Loamia 的結案報表生成助理。基於提供的品牌資料，為「${brandName}」產出一份結構化的月度結案報告。
+  const systemPrompt = `你是 Loamia 的結案報表生成助理。基於提供的品牌資料，為「${brandName}」產出一份結構化的結案報告。
 
 ## 結構（用 Markdown 標題）
 # ${brandName} 結案報告

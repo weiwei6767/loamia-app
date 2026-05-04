@@ -3,9 +3,23 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import { generateReportContent, makeAutoTitle } from "@/lib/ai/report";
+import {
+  retrieveRelevantChunks,
+  fetchChunksByDocs,
+  isRelevant,
+  listBrandDocuments,
+  generateReportFromChunks,
+  makeAutoTitle,
+} from "@/lib/ai/report";
 
-export type GenerateState = { error?: string } | undefined;
+export type GenerateState =
+  | undefined
+  | { error: string }
+  | {
+      needsSelection: true;
+      focus: string;
+      documents: { id: string; filename: string }[];
+    };
 
 export async function generateReport(
   _state: GenerateState,
@@ -13,6 +27,7 @@ export async function generateReport(
 ): Promise<GenerateState> {
   const brandId = String(formData.get("brandId") ?? "");
   const focus = String(formData.get("focus") ?? "").trim();
+  const selectedDocIds = formData.getAll("docId").map(String).filter(Boolean);
   if (!brandId) return { error: "missing brandId" };
 
   const supabase = await createClient();
@@ -26,16 +41,34 @@ export async function generateReport(
     .single();
   if (!brand) return { error: "品牌不存在或無權限" };
 
+  let chunks;
+  try {
+    if (selectedDocIds.length > 0) {
+      chunks = await fetchChunksByDocs(brand.id, selectedDocIds);
+      if (chunks.length === 0) return { error: "選的文件中沒有可用內容" };
+    } else {
+      chunks = await retrieveRelevantChunks(brand.id, focus, 50);
+      if (!isRelevant(chunks)) {
+        const documents = await listBrandDocuments(brand.id);
+        if (documents.length === 0) return { error: "no_documents" };
+        return {
+          needsSelection: true,
+          focus,
+          documents: documents.map((d) => ({ id: d.id, filename: d.filename })),
+        };
+      }
+    }
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "查詢失敗" };
+  }
+
   let content: string;
   let citations: unknown;
   try {
-    const result = await generateReportContent(brand.id, brand.name, focus);
+    const result = await generateReportFromChunks(brand.name, focus, chunks);
     content = result.content;
     citations = result.citations;
   } catch (err) {
-    if (err instanceof Error && err.message === "no_documents") {
-      return { error: "no_documents" };
-    }
     return { error: err instanceof Error ? err.message : "生成失敗" };
   }
 

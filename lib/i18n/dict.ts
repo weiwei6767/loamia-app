@@ -96,6 +96,14 @@ export const dict = {
   "reports.error.no_docs": { zh: "請先上傳文件再生成報表", en: "Upload documents first before generating a report" },
   "reports.citation.label": { zh: "引用來源", en: "Sources" },
   "reports.created": { zh: "建立於", en: "Generated" },
+  "reports.select.heading": { zh: "沒找到相關資料", en: "No matching content found" },
+  "reports.select.body.before": { zh: "在現有文件中找不到「", en: 'No content matching "' },
+  "reports.select.body.after": { zh: "」相關內容。請勾選要包含的文件，或上傳新資料。", en: '" found. Pick documents to include below, or upload new ones.' },
+  "reports.select.docs": { zh: "可用文件", en: "Available documents" },
+  "reports.select.upload": { zh: "上傳新文件", en: "Upload new document" },
+  "reports.select.upload_hint": { zh: "上傳完會自動重新整理頁面", en: "Page refreshes automatically after upload" },
+  "reports.select.generate": { zh: "用勾選文件生成", en: "Generate with selected" },
+  "reports.select.empty_pick": { zh: "請至少勾選一份文件", en: "Pick at least one document" },
 
   // Settings
   "settings.label": { zh: "設定", en: "Settings" },
