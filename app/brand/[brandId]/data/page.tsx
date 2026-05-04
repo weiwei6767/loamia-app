@@ -5,7 +5,6 @@ import { getServerT } from "@/lib/i18n/server";
 import { Uploader } from "../uploader";
 import { DocumentList } from "../document-list";
 import { BrandStatusToggle } from "../brand-status-toggle";
-import { VisionUploadSection, CustomStylesList } from "./vision-section";
 
 type Doc = {
   id: string;
@@ -16,13 +15,6 @@ type Doc = {
   error_message: string | null;
   tags: string[] | null;
   period: string | null;
-};
-
-type CustomStyle = {
-  id: string;
-  name: string;
-  analysis: string;
-  created_at: string;
 };
 
 export default async function DataPage({
@@ -42,21 +34,14 @@ export default async function DataPage({
     .single();
   if (!brand) notFound();
 
-  const [{ data: documents }, { data: customStyles }] = await Promise.all([
-    supabase
-      .from("documents")
-      .select("id, filename, status, byte_size, created_at, error_message, tags, period")
-      .eq("brand_id", brand.id)
-      .order("created_at", { ascending: false }),
-    supabase
-      .from("custom_styles")
-      .select("id, name, analysis, created_at")
-      .order("created_at", { ascending: false }),
-  ]);
+  const { data: documents } = await supabase
+    .from("documents")
+    .select("id, filename, status, byte_size, created_at, error_message, tags, period")
+    .eq("brand_id", brand.id)
+    .order("created_at", { ascending: false });
 
   const t = await getServerT();
   const docs: Doc[] = (documents ?? []) as Doc[];
-  const styles: CustomStyle[] = (customStyles ?? []) as CustomStyle[];
 
   return (
     <main className="min-h-screen flex flex-col">
@@ -130,25 +115,6 @@ export default async function DataPage({
             <p className="text-sm text-[var(--muted)]">{t("data.docs.empty")}</p>
           ) : (
             <DocumentList brandId={brand.id} documents={docs} />
-          )}
-        </section>
-
-        <section>
-          <div className="mb-3">
-            <h3 className="font-mono text-sm tracking-widest text-[var(--accent)]">
-              📷 {t("data.styles.section")}
-            </h3>
-            <p className="mt-1 text-xs text-[var(--muted)]">{t("data.styles.help")}</p>
-          </div>
-
-          <div className="border border-[var(--line)] bg-[var(--surface)] p-5 mb-5">
-            <VisionUploadSection brandId={brand.id} />
-          </div>
-
-          {styles.length === 0 ? (
-            <p className="text-sm text-[var(--muted)]">{t("data.styles.empty")}</p>
-          ) : (
-            <CustomStylesList styles={styles} brandId={brand.id} />
           )}
         </section>
       </section>
