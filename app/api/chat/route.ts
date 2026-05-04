@@ -4,6 +4,7 @@ import { anthropic, CHAT_MODEL } from "@/lib/ai/anthropic";
 import { retrieveContext, buildSystemPrompt, type Citation } from "@/lib/ai/rag";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 type ChatBody = {
   brandId: string;
@@ -95,7 +96,8 @@ export async function POST(req: NextRequest) {
 
   const systemPrompt = buildSystemPrompt(brand.name, citations);
 
-  const stream = await anthropic().messages.stream({
+  const client = await anthropic();
+  const stream = client.messages.stream({
     model: CHAT_MODEL,
     max_tokens: 2048,
     system: systemPrompt,

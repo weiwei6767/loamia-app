@@ -1,9 +1,23 @@
-import Anthropic from "@anthropic-ai/sdk";
+type AnthropicClient = {
+  messages: {
+    stream(args: {
+      model: string;
+      max_tokens: number;
+      system: string;
+      messages: { role: "user" | "assistant"; content: string }[];
+    }): AsyncIterable<{
+      type: string;
+      delta?: { type: string; text?: string };
+      [k: string]: unknown;
+    }>;
+  };
+};
 
-let _client: Anthropic | null = null;
-export function anthropic(): Anthropic {
+let _client: AnthropicClient | null = null;
+export async function anthropic(): Promise<AnthropicClient> {
   if (!_client) {
-    _client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! });
+    const { default: Anthropic } = await import("@anthropic-ai/sdk");
+    _client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! }) as unknown as AnthropicClient;
   }
   return _client;
 }
