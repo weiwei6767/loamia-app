@@ -31,11 +31,19 @@ export default async function MonitorPage({
     .single();
   if (!brand) notFound();
 
-  const { data: rows } = await supabase
-    .from("monitor_replies")
-    .select("id, source_text, source_type, tone, suggestions, created_at")
-    .eq("brand_id", brand.id)
-    .order("created_at", { ascending: false });
+  const [{ data: rows }, { data: connection }] = await Promise.all([
+    supabase
+      .from("monitor_replies")
+      .select("id, source_text, source_type, tone, suggestions, created_at")
+      .eq("brand_id", brand.id)
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("social_connections")
+      .select("username, platform_user_id")
+      .eq("brand_id", brand.id)
+      .eq("platform", "threads")
+      .maybeSingle(),
+  ]);
 
   const t = await getServerT();
   const history: MonitorRow[] = (rows ?? []).map((r) => ({
@@ -115,7 +123,18 @@ export default async function MonitorPage({
           <p className="mt-2 text-sm text-[var(--muted)]">{t("monitor.subtitle")}</p>
         </div>
 
-        <MonitorView brandId={brand.id} history={history} />
+        <MonitorView
+          brandId={brand.id}
+          history={history}
+          connection={
+            connection
+              ? {
+                  username: (connection.username as string | null) ?? null,
+                  platform_user_id: connection.platform_user_id as string,
+                }
+              : null
+          }
+        />
       </section>
     </main>
   );

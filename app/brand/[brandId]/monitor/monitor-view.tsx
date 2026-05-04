@@ -1,9 +1,10 @@
 "use client";
 
-import { useActionState, useEffect, useMemo, useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
+import { useActionState, useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { generateReplies, deleteMonitorReply, type MonitorState } from "./actions";
 import { useI18n } from "@/lib/i18n/provider";
+import { ThreadsSection } from "./threads-section";
 
 type MonitorRow = {
   id: string;
@@ -12,6 +13,11 @@ type MonitorRow = {
   tone: string | null;
   suggestions: string[];
   created_at: string;
+};
+
+type ThreadsConnection = {
+  username: string | null;
+  platform_user_id: string;
 };
 
 type ToastStatus = "generating" | "done" | "error";
@@ -42,17 +48,52 @@ function groupByMonth(rows: MonitorRow[], locale: "zh" | "en") {
 export function MonitorView({
   brandId,
   history,
+  connection,
 }: {
   brandId: string;
   history: MonitorRow[];
+  connection: ThreadsConnection | null;
 }) {
   const { t, locale } = useI18n();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [state, action, pending] = useActionState<MonitorState, FormData>(generateReplies, undefined);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [pendingToastId, setPendingToastId] = useState<string>("");
   const [search, setSearch] = useState("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const sourceTextRef = useRef<HTMLTextAreaElement>(null);
+  const sourceTypeRef = useRef<HTMLInputElement>(null);
+
+  // Show toast for OAuth connection result on mount
+  useEffect(() => {
+    const connected = searchParams.get("threads_connected");
+    const errorMsg = searchParams.get("threads_error");
+    if (connected) {
+      const id = crypto.randomUUID();
+      setToasts((prev) => [...prev, { id, status: "done" }]);
+      setTimeout(() => setToasts((prev) => prev.filter((t0) => t0.id !== id)), TOAST_DISMISS_MS);
+      router.replace(`/brand/${brandId}/monitor`);
+    } else if (errorMsg) {
+      const id = crypto.randomUUID();
+      setToasts((prev) => [...prev, { id, status: "error", error: decodeURIComponent(errorMsg) }]);
+      router.replace(`/brand/${brandId}/monitor`);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function fillFromThreadsPost(post: { text?: string; username?: string }) {
+    if (sourceTextRef.current) {
+      sourceTextRef.current.value = post.text ?? "";
+      sourceTextRef.current.focus();
+    }
+    if (sourceTypeRef.current) {
+      sourceTypeRef.current.value = post.username
+        ? `Threads · @${post.username}`
+        : "Threads 貼文";
+    }
+    sourceTextRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }
 
   useEffect(() => {
     if (pending && !pendingToastId) {
@@ -102,13 +143,12 @@ export function MonitorView({
 
   return (
     <>
-      {/* Future API integration note */}
-      <div className="border border-dashed border-[var(--line)] bg-[var(--surface-2)]/50 px-4 py-3 text-xs">
-        <div className="font-mono tracking-widest text-[var(--muted)]">
-          {t("monitor.api_note.title")}
-        </div>
-        <p className="mt-1 text-[var(--muted)] leading-relaxed">{t("monitor.api_note.body")}</p>
-      </div>
+      {/* Threads API integration */}
+      <ThreadsSection
+        brandId={brandId}
+        connection={connection}
+        onUsePost={fillFromThreadsPost}
+      />
 
       <form
         action={action}
@@ -124,6 +164,7 @@ export function MonitorView({
             {t("monitor.source.label")}
           </label>
           <textarea
+            ref={sourceTextRef}
             id="sourceText"
             name="sourceText"
             rows={4}
@@ -143,6 +184,7 @@ export function MonitorView({
               {t("monitor.type.label")}
             </label>
             <input
+              ref={sourceTypeRef}
               id="sourceType"
               name="sourceType"
               type="text"
