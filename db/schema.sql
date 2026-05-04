@@ -112,6 +112,21 @@ create table if not exists brand_reports (
 create index if not exists brand_reports_brand_id_idx on brand_reports(brand_id);
 
 -- =====================================================
+-- 5d. section_presets — 段落快速模板（只儲存段落，不含風格/語氣）
+-- =====================================================
+create table if not exists section_presets (
+  id uuid primary key default gen_random_uuid(),
+  agency_id uuid not null references agencies(id) on delete cascade,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  name text not null,
+  sections jsonb not null,
+  created_at timestamptz not null default now(),
+  unique(agency_id, name)
+);
+
+create index if not exists section_presets_agency_idx on section_presets(agency_id);
+
+-- =====================================================
 -- 5c. report_templates — 使用者儲存的報表模板
 -- =====================================================
 create table if not exists report_templates (
@@ -148,6 +163,11 @@ create policy "brand_reports_all" on brand_reports for all
 
 alter table report_templates enable row level security;
 create policy "report_templates_all" on report_templates for all
+  using (agency_id in (select user_agency_ids()))
+  with check (agency_id in (select user_agency_ids()));
+
+alter table section_presets enable row level security;
+create policy "section_presets_all" on section_presets for all
   using (agency_id in (select user_agency_ids()))
   with check (agency_id in (select user_agency_ids()));
 

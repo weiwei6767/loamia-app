@@ -21,7 +21,7 @@ export default async function ReportsPage({
     .single();
   if (!brand) notFound();
 
-  const [{ data: reports }, { data: templates }] = await Promise.all([
+  const [{ data: reports }, { data: templates }, { data: sectionPresets }] = await Promise.all([
     supabase
       .from("brand_reports")
       .select("id, title, focus, created_at")
@@ -30,6 +30,10 @@ export default async function ReportsPage({
     supabase
       .from("report_templates")
       .select("id, name, sections, tone, length, lang, style")
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("section_presets")
+      .select("id, name, sections")
       .order("created_at", { ascending: false }),
   ]);
 
@@ -79,7 +83,11 @@ export default async function ReportsPage({
           <p className="mt-2 text-sm text-[var(--muted)]">{t("reports.subtitle")}</p>
         </div>
 
-        <GenerateForm brandId={brand.id} templates={templates ?? []} />
+        <GenerateForm
+          brandId={brand.id}
+          templates={templates ?? []}
+          sectionPresets={sectionPresets ?? []}
+        />
 
         <div className="mt-10">
           {(!reports || reports.length === 0) ? (

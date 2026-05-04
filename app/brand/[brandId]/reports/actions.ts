@@ -201,3 +201,58 @@ export async function deleteTemplate(templateId: string, brandId: string) {
   await supabase.from("report_templates").delete().eq("id", templateId);
   revalidatePath(`/brand/${brandId}/reports`);
 }
+
+// ─── Section presets (just the sections list) ─────
+
+export type SectionPresetState =
+  | undefined
+  | { error: string }
+  | { success: string };
+
+export async function saveSectionPreset(
+  _state: SectionPresetState,
+  formData: FormData
+): Promise<SectionPresetState> {
+  const name = String(formData.get("presetName") ?? "").trim();
+  const sectionsRaw = String(formData.get("sections") ?? "").trim();
+  const brandId = String(formData.get("brandId") ?? "");
+
+  if (!name) return { error: "請輸入模板名稱" };
+  const sections = sectionsRaw
+    .split(/\r?\n/)
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .slice(0, 12);
+  if (sections.length === 0) return { error: "請輸入至少一個段落" };
+
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "未登入" };
+
+  const { data: memberships } = await supabase
+    .from("agency_members")
+    .select("agency_id")
+    .limit(1);
+  const agencyId = memberships?.[0]?.agency_id;
+  if (!agencyId) return { error: "no agency" };
+
+  const { error } = await supabase.from("section_presets").upsert(
+    {
+      agency_id: agencyId,
+      user_id: user.id,
+      name: name.slice(0, 60),
+      sections,
+    },
+    { onConflict: "agency_id,name" }
+  );
+  if (error) return { error: error.message };
+
+  if (brandId) revalidatePath(`/brand/${brandId}/reports`);
+  return { success: `段落「${name}」已儲存` };
+}
+
+export async function deleteSectionPreset(presetId: string, brandId: string) {
+  const supabase = await createClient();
+  await supabase.from("section_presets").delete().eq("id", presetId);
+  revalidatePath(`/brand/${brandId}/reports`);
+}

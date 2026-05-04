@@ -141,6 +141,11 @@ export const dict = {
   "reports.template.empty": { zh: "（還沒有自訂模板）", en: "(No saved templates yet)" },
   "reports.template.delete": { zh: "刪除", en: "Delete" },
   "reports.template.delete.confirm": { zh: "確定刪除這個模板？", en: "Delete this template?" },
+  "reports.section_preset.save": { zh: "+ 儲存目前段落為模板", en: "+ Save current sections" },
+  "reports.section_preset.name.placeholder": { zh: "段落模板名稱（例：飲料品牌月報）", en: "Section preset name" },
+  "reports.section_preset.delete.confirm": { zh: "確定刪除這個段落模板？", en: "Delete this section preset?" },
+  "reports.section_preset.system": { zh: "系統", en: "System" },
+  "reports.section_preset.mine": { zh: "我的", en: "Mine" },
 
   // Settings
   "settings.label": { zh: "設定", en: "Settings" },
