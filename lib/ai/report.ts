@@ -78,8 +78,8 @@ const TONE_INSTRUCTIONS: Record<Tone, { zh: string; en: string }> = {
     en: "Internal review: direct about issues, include team execution details, agency lingo OK",
   },
   casual: {
-    zh: "親切口語、像跟同事在報告，但仍維持專業；可加適度的 emoji",
-    en: "Conversational, like reporting to a colleague, still professional; modest emoji OK",
+    zh: "親切口語、像跟同事在報告，文字溫度較高但仍維持專業；不使用 emoji",
+    en: "Conversational, like reporting to a colleague, warmer tone but still professional; no emoji",
   },
   data: {
     zh: "數據導向：每個論點都引用具體數字，多用表格、項目符號清單呈現",

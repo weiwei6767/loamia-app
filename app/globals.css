@@ -99,3 +99,102 @@ body {
     0 0 32px color-mix(in srgb, var(--accent) 40%, transparent),
     0 8px 24px rgba(0, 0, 0, 0.3);
 }
+
+/* Markdown rendering — used for report detail page */
+.markdown-body h1 {
+  font-size: 1.875rem;
+  font-weight: 800;
+  margin: 1.5em 0 0.6em;
+  line-height: 1.25;
+}
+.markdown-body h2 {
+  font-size: 1.4rem;
+  font-weight: 700;
+  margin: 1.6em 0 0.5em;
+  padding-bottom: 0.3em;
+  border-bottom: 1px solid currentColor;
+  border-color: color-mix(in srgb, currentColor 25%, transparent);
+  line-height: 1.3;
+}
+.markdown-body h3 {
+  font-size: 1.15rem;
+  font-weight: 700;
+  margin: 1.2em 0 0.4em;
+}
+.markdown-body h4 {
+  font-size: 1rem;
+  font-weight: 700;
+  margin: 1em 0 0.4em;
+}
+.markdown-body p {
+  margin: 0.8em 0;
+}
+.markdown-body ul,
+.markdown-body ol {
+  margin: 0.8em 0;
+  padding-left: 1.6em;
+}
+.markdown-body ul { list-style: disc; }
+.markdown-body ol { list-style: decimal; }
+.markdown-body li {
+  margin: 0.3em 0;
+}
+.markdown-body li > p {
+  margin: 0.2em 0;
+}
+.markdown-body strong { font-weight: 700; }
+.markdown-body em { font-style: italic; }
+.markdown-body code {
+  font-family: var(--font-mono), 'JetBrains Mono', monospace;
+  background: color-mix(in srgb, currentColor 8%, transparent);
+  padding: 0.1em 0.35em;
+  border-radius: 3px;
+  font-size: 0.92em;
+}
+.markdown-body pre {
+  background: color-mix(in srgb, currentColor 6%, transparent);
+  padding: 0.8em 1em;
+  border-radius: 4px;
+  overflow-x: auto;
+  margin: 1em 0;
+  font-size: 0.9em;
+}
+.markdown-body pre code {
+  background: transparent;
+  padding: 0;
+}
+.markdown-body blockquote {
+  border-left: 3px solid;
+  border-color: color-mix(in srgb, currentColor 35%, transparent);
+  margin: 1em 0;
+  padding-left: 1em;
+  opacity: 0.85;
+  font-style: italic;
+}
+.markdown-body table {
+  border-collapse: collapse;
+  margin: 1em 0;
+  width: 100%;
+  font-size: 0.92em;
+}
+.markdown-body th,
+.markdown-body td {
+  border: 1px solid;
+  border-color: color-mix(in srgb, currentColor 20%, transparent);
+  padding: 0.55em 0.85em;
+  text-align: left;
+}
+.markdown-body th {
+  background: color-mix(in srgb, currentColor 6%, transparent);
+  font-weight: 700;
+}
+.markdown-body hr {
+  border: none;
+  border-top: 1px solid;
+  border-color: color-mix(in srgb, currentColor 20%, transparent);
+  margin: 2em 0;
+}
+.markdown-body a {
+  color: inherit;
+  text-decoration: underline;
+}

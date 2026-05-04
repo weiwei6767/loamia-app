@@ -1,6 +1,7 @@
 "use client";
 
-import { useActionState, useState, useTransition } from "react";
+import { useActionState, useEffect, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import {
   generateReport,
   saveTemplate,
@@ -316,11 +317,16 @@ function SaveTemplateInline({
   onDone: () => void;
 }) {
   const { t } = useI18n();
+  const router = useRouter();
   const [state, action, pending] = useActionState<SaveTemplateState, FormData>(saveTemplate, undefined);
 
-  if (state && "success" in state && state.success) {
-    setTimeout(onDone, 800);
-  }
+  useEffect(() => {
+    if (state && "success" in state && state.success) {
+      router.refresh();
+      const timer = setTimeout(onDone, 800);
+      return () => clearTimeout(timer);
+    }
+  }, [state, router, onDone]);
 
   return (
     <form action={action} className="p-3 border border-[var(--accent)]/40 bg-[var(--surface-2)] flex flex-wrap items-center gap-2">

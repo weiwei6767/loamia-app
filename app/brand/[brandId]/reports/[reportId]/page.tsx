@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { createClient } from "@/lib/supabase/server";
 import { getServerT } from "@/lib/i18n/server";
 import { DeleteButton } from "./delete-button";
@@ -101,11 +103,8 @@ export default async function ReportDetailPage({
             </div>
           </div>
 
-          <div
-            className="prose-content text-[15px] leading-[1.85] whitespace-pre-wrap"
-            style={bodyStyle}
-          >
-            {report.content}
+          <div className="markdown-body text-[15px] leading-[1.85]" style={bodyStyle}>
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>{report.content}</ReactMarkdown>
           </div>
 
           {uniqueFiles.length > 0 && (
