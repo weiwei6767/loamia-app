@@ -89,6 +89,7 @@ export function GenerateForm({
   };
 
   return (
+    <div className="space-y-3">
     <form action={action} className="border border-[var(--line)] bg-[var(--surface)] p-5 space-y-5">
       <input type="hidden" name="brandId" value={brandId} />
 
@@ -283,20 +284,21 @@ export function GenerateForm({
         </button>
       </div>
 
-      {showSave && (
-        <SaveTemplateInline
-          brandId={brandId}
-          opts={{ focus, sections, tone, length, lang, style }}
-          onDone={() => setShowSave(false)}
-        />
-      )}
-
       {pending && (
         <p className="text-xs text-[var(--muted)]">
           (生成需要 30 秒到 2 分鐘，請耐心等待)
         </p>
       )}
     </form>
+
+    {showSave && (
+      <SaveTemplateInline
+        brandId={brandId}
+        opts={{ focus, sections, tone, length, lang, style }}
+        onDone={() => setShowSave(false)}
+      />
+    )}
+    </div>
   );
 }
 
