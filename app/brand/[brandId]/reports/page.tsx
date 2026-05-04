@@ -77,6 +77,12 @@ export default async function ReportsPage({
               {t("data.nav")}
             </Link>
             <Link
+              href={`/brand/${brand.id}/content`}
+              className="px-3 py-1.5 text-[var(--muted)] hover:text-[var(--foreground)]"
+            >
+              {t("content.nav")}
+            </Link>
+            <Link
               href={`/brand/${brand.id}/reports`}
               className="px-3 py-1.5 border-b-2 border-[var(--accent)] text-[var(--accent)]"
             >

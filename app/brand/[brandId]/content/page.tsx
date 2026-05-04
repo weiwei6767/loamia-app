@@ -2,70 +2,55 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getServerT } from "@/lib/i18n/server";
-import { Chat } from "./chat";
-import { ThreadList } from "./thread-list";
-import { BrandStatusToggle } from "./brand-status-toggle";
+import { BrandStatusToggle } from "../brand-status-toggle";
+import { ContentView } from "./content-view";
 
-type StoredCitation = {
+type ContentRow = {
   id: string;
-  document_id: string;
-  filename: string;
-  content: string;
-  similarity: number;
-};
-
-type StoredMessage = {
-  id: string;
-  role: "user" | "assistant" | "system";
-  content: string;
-  citations: StoredCitation[] | null;
+  type: string;
+  prompt: string;
+  audience: string | null;
+  variants: string[];
   created_at: string;
 };
 
-export default async function BrandPage({
+export default async function ContentPage({
   params,
-  searchParams,
 }: {
   params: Promise<{ brandId: string }>;
-  searchParams: Promise<{ thread?: string }>;
 }) {
   const { brandId } = await params;
-  const { thread: threadIdRaw } = await searchParams;
-  const threadId = threadIdRaw ?? null;
-
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
 
   const { data: brand } = await supabase
     .from("brands")
-    .select("id, name, agency_id, status")
+    .select("id, name, status")
     .eq("id", brandId)
     .single();
   if (!brand) notFound();
 
-  const { data: threads } = await supabase
-    .from("chat_threads")
-    .select("id, title, created_at")
+  const { data: outputs } = await supabase
+    .from("content_outputs")
+    .select("id, type, prompt, audience, variants, created_at")
     .eq("brand_id", brand.id)
     .order("created_at", { ascending: false });
 
-  let initialMessages: StoredMessage[] = [];
-  if (threadId) {
-    const { data: msgs } = await supabase
-      .from("chat_messages")
-      .select("id, role, content, citations, created_at")
-      .eq("thread_id", threadId)
-      .order("created_at", { ascending: true });
-    initialMessages = (msgs ?? []) as StoredMessage[];
-  }
-
   const t = await getServerT();
+  const history: ContentRow[] = (outputs ?? []).map((r) => ({
+    id: r.id as string,
+    type: r.type as string,
+    prompt: r.prompt as string,
+    audience: (r.audience as string | null) ?? null,
+    variants: (r.variants as string[] | null) ?? [],
+    created_at: r.created_at as string,
+  }));
 
   return (
     <main className="min-h-screen flex flex-col">
       <header className="border-b border-[var(--line)]">
-        <div className="mx-auto max-w-7xl flex items-center justify-between px-4 md:px-6 py-4 gap-4">
+        <div className="mx-auto max-w-5xl flex items-center justify-between px-4 md:px-6 py-4 gap-4">
           <div className="flex items-center gap-4 min-w-0">
             <Link
               href="/dashboard"
@@ -74,7 +59,9 @@ export default async function BrandPage({
               {t("brand.back")}
             </Link>
             <div className="min-w-0">
-              <div className="text-xs font-mono tracking-widest text-[var(--accent)]">{t("brand.label")}</div>
+              <div className="text-xs font-mono tracking-widest text-[var(--accent)]">
+                {t("brand.label")}
+              </div>
               <h1 className="text-lg font-bold truncate">{brand.name}</h1>
             </div>
           </div>
@@ -82,7 +69,7 @@ export default async function BrandPage({
             <nav className="flex items-center gap-1 text-xs font-mono">
               <Link
                 href={`/brand/${brand.id}`}
-                className="px-3 py-1.5 border-b-2 border-[var(--accent)] text-[var(--accent)]"
+                className="px-3 py-1.5 text-[var(--muted)] hover:text-[var(--foreground)]"
               >
                 {t("reports.chat")}
               </Link>
@@ -94,7 +81,7 @@ export default async function BrandPage({
               </Link>
               <Link
                 href={`/brand/${brand.id}/content`}
-                className="px-3 py-1.5 text-[var(--muted)] hover:text-[var(--foreground)]"
+                className="px-3 py-1.5 border-b-2 border-[var(--accent)] text-[var(--accent)]"
               >
                 {t("content.nav")}
               </Link>
@@ -105,26 +92,25 @@ export default async function BrandPage({
                 {t("reports.nav")}
               </Link>
             </nav>
-            <BrandStatusToggle brandId={brand.id} status={brand.status as "active" | "archived"} />
+            <BrandStatusToggle
+              brandId={brand.id}
+              status={brand.status as "active" | "archived"}
+            />
           </div>
         </div>
       </header>
 
-      <div className="flex-1 grid lg:grid-cols-[280px_1fr]">
-        <aside className="border-r border-[var(--line)] p-5 lg:max-h-[calc(100vh-65px)] lg:overflow-y-auto">
-          <ThreadList brandId={brand.id} threads={threads ?? []} currentThreadId={threadId} />
-        </aside>
+      <section className="mx-auto max-w-5xl w-full px-4 md:px-6 py-10 space-y-8">
+        <div>
+          <div className="font-mono text-xs tracking-widest text-[var(--accent)]">
+            {t("content.nav")} · {brand.name.toUpperCase()}
+          </div>
+          <h2 className="mt-2 text-2xl md:text-3xl font-bold">{t("content.title")}</h2>
+          <p className="mt-2 text-sm text-[var(--muted)]">{t("content.subtitle")}</p>
+        </div>
 
-        <section className="lg:max-h-[calc(100vh-65px)]">
-          <Chat
-            key={threadId ?? "new"}
-            brandId={brand.id}
-            brandName={brand.name}
-            threadId={threadId}
-            initialMessages={initialMessages}
-          />
-        </section>
-      </div>
+        <ContentView brandId={brand.id} history={history} />
+      </section>
     </main>
   );
 }
