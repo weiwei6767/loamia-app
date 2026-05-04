@@ -533,6 +533,7 @@ function CustomStyleButton({
 function VisionUpload({ brandId }: { brandId: string }) {
   const { t } = useI18n();
   const router = useRouter();
+  const [open, setOpen] = useState(false);
   const [state, action, pending] = useActionState<CustomStyleState, FormData>(
     analyzeReferenceStyle,
     undefined
@@ -547,56 +548,64 @@ function VisionUpload({ brandId }: { brandId: string }) {
   }, [state, router]);
 
   return (
-    <div className="border border-dashed border-[var(--accent)]/40 bg-[var(--surface)] p-4 space-y-3">
-      <div className="flex items-center gap-2 text-xs font-mono tracking-widest text-[var(--accent)]">
-        <span>📷</span>
-        <span>{t("reports.vision.section")}</span>
-      </div>
-      <p className="text-xs text-[var(--muted)]">{t("reports.vision.help")}</p>
-      <form action={action} className="space-y-2">
-        <input type="hidden" name="brandId" value={brandId} />
-        <input
-          name="refImage"
-          type="file"
-          accept="image/png,image/jpeg,image/webp,image/gif"
-          required
-          className="block w-full text-xs text-[var(--muted)] file:mr-3 file:border-0 file:bg-[var(--surface-2)] file:px-3 file:py-1.5 file:text-xs file:text-[var(--foreground)] hover:file:bg-[var(--accent)] hover:file:text-[var(--background)]"
-        />
-        <div className="flex gap-2">
-          <input
-            name="styleName"
-            type="text"
-            required
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            maxLength={60}
-            placeholder={t("reports.vision.name.placeholder")}
-            className="flex-1 text-xs px-2 py-1.5 border border-[var(--line)] bg-[var(--surface-2)] focus:border-[var(--accent)] focus:outline-none"
-          />
-          <button
-            type="submit"
-            disabled={pending}
-            className="text-xs px-3 py-1.5 bg-[var(--accent)] text-[var(--background)] font-bold hover:bg-[var(--accent-glow)] disabled:opacity-50 inline-flex items-center gap-1.5"
-          >
-            {pending ? (
-              <>
-                <span className="spinner" />
-                {t("reports.vision.analyzing")}
-              </>
-            ) : (
-              t("reports.vision.upload")
+    <div className="border border-[var(--line)] bg-[var(--surface)] p-4">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="w-full text-left text-xs font-mono tracking-widest text-[var(--accent)] flex items-center justify-between hover:text-[var(--accent-glow)]"
+      >
+        <span>📷 {t("reports.vision.section")}</span>
+        <span className="text-base">{open ? "−" : "+"}</span>
+      </button>
+      {open && (
+        <div className="mt-4 space-y-3">
+          <p className="text-xs text-[var(--muted)]">{t("reports.vision.help")}</p>
+          <form action={action} className="space-y-2">
+            <input type="hidden" name="brandId" value={brandId} />
+            <input
+              name="refImage"
+              type="file"
+              accept="image/png,image/jpeg,image/webp,image/gif"
+              required
+              className="block w-full text-xs text-[var(--muted)] file:mr-3 file:border-0 file:bg-[var(--surface-2)] file:px-3 file:py-1.5 file:text-xs file:text-[var(--foreground)] hover:file:bg-[var(--accent)] hover:file:text-[var(--background)]"
+            />
+            <div className="flex gap-2">
+              <input
+                name="styleName"
+                type="text"
+                required
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                maxLength={60}
+                placeholder={t("reports.vision.name.placeholder")}
+                className="flex-1 text-xs px-2 py-1.5 border border-[var(--line)] bg-[var(--surface-2)] focus:border-[var(--accent)] focus:outline-none"
+              />
+              <button
+                type="submit"
+                disabled={pending}
+                className="text-xs px-3 py-1.5 bg-[var(--accent)] text-[var(--background)] font-bold hover:bg-[var(--accent-glow)] disabled:opacity-50 inline-flex items-center gap-1.5"
+              >
+                {pending ? (
+                  <>
+                    <span className="spinner" />
+                    {t("reports.vision.analyzing")}
+                  </>
+                ) : (
+                  t("reports.vision.upload")
+                )}
+              </button>
+            </div>
+            {state && "error" in state && state.error && (
+              <p className="text-xs text-red-400">{state.error}</p>
             )}
-          </button>
+            {state && "success" in state && state.success && (
+              <p className="text-xs text-[var(--accent)]">
+                ✓ {t("reports.vision.success")}：{state.success}
+              </p>
+            )}
+          </form>
         </div>
-        {state && "error" in state && state.error && (
-          <p className="text-xs text-red-400">{state.error}</p>
-        )}
-        {state && "success" in state && state.success && (
-          <p className="text-xs text-[var(--accent)]">
-            ✓ {t("reports.vision.success")}：{state.success}
-          </p>
-        )}
-      </form>
+      )}
     </div>
   );
 }
