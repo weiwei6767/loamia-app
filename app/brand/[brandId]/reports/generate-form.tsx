@@ -151,6 +151,9 @@ export function GenerateForm({
 
   return (
     <div className="space-y-3">
+    <DocsUploadSection brandId={brandId} />
+    <VisionUpload brandId={brandId} />
+
     <form action={action} className="border border-[var(--line)] bg-[var(--surface)] p-5 space-y-5">
       <input type="hidden" name="brandId" value={brandId} />
 
@@ -454,9 +457,6 @@ export function GenerateForm({
         onDone={() => setShowSave(false)}
       />
     )}
-
-    <DocsUploadSection brandId={brandId} />
-    <VisionUpload brandId={brandId} />
     </div>
   );
 }
