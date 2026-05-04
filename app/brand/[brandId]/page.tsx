@@ -2,9 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getServerT } from "@/lib/i18n/server";
-import { Uploader } from "./uploader";
 import { Chat } from "./chat";
-import { DocumentList } from "./document-list";
 import { ThreadList } from "./thread-list";
 import { BrandStatusToggle } from "./brand-status-toggle";
 
@@ -46,18 +44,11 @@ export default async function BrandPage({
     .single();
   if (!brand) notFound();
 
-  const [{ data: documents }, { data: threads }] = await Promise.all([
-    supabase
-      .from("documents")
-      .select("id, filename, status, byte_size, created_at, error_message, tags, period")
-      .eq("brand_id", brand.id)
-      .order("created_at", { ascending: false }),
-    supabase
-      .from("chat_threads")
-      .select("id, title, created_at")
-      .eq("brand_id", brand.id)
-      .order("created_at", { ascending: false }),
-  ]);
+  const { data: threads } = await supabase
+    .from("chat_threads")
+    .select("id, title, created_at")
+    .eq("brand_id", brand.id)
+    .order("created_at", { ascending: false });
 
   let initialMessages: StoredMessage[] = [];
   if (threadId) {
@@ -96,6 +87,12 @@ export default async function BrandPage({
                 {t("reports.chat")}
               </Link>
               <Link
+                href={`/brand/${brand.id}/data`}
+                className="px-3 py-1.5 text-[var(--muted)] hover:text-[var(--foreground)]"
+              >
+                {t("data.nav")}
+              </Link>
+              <Link
                 href={`/brand/${brand.id}/reports`}
                 className="px-3 py-1.5 text-[var(--muted)] hover:text-[var(--foreground)]"
               >
@@ -107,20 +104,9 @@ export default async function BrandPage({
         </div>
       </header>
 
-      <div className="flex-1 grid lg:grid-cols-[280px_1fr] xl:grid-cols-[280px_280px_1fr]">
+      <div className="flex-1 grid lg:grid-cols-[280px_1fr]">
         <aside className="border-r border-[var(--line)] p-5 lg:max-h-[calc(100vh-65px)] lg:overflow-y-auto">
           <ThreadList brandId={brand.id} threads={threads ?? []} currentThreadId={threadId} />
-        </aside>
-
-        <aside className="border-r border-[var(--line)] p-5 space-y-6 lg:max-h-[calc(100vh-65px)] lg:overflow-y-auto xl:block hidden">
-          <section>
-            <div className="text-xs font-mono tracking-widest text-[var(--muted)] mb-3">{t("brand.upload")}</div>
-            <Uploader brandId={brand.id} />
-          </section>
-          <section>
-            <div className="text-xs font-mono tracking-widest text-[var(--muted)] mb-3">{t("brand.documents")}</div>
-            <DocumentList brandId={brand.id} documents={documents ?? []} />
-          </section>
         </aside>
 
         <section className="lg:max-h-[calc(100vh-65px)]">

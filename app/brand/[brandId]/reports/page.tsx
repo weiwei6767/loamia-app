@@ -70,6 +70,12 @@ export default async function ReportsPage({
               {t("reports.chat")}
             </Link>
             <Link
+              href={`/brand/${brand.id}/data`}
+              className="px-3 py-1.5 text-[var(--muted)] hover:text-[var(--foreground)]"
+            >
+              {t("data.nav")}
+            </Link>
+            <Link
               href={`/brand/${brand.id}/reports`}
               className="px-3 py-1.5 border-b-2 border-[var(--accent)] text-[var(--accent)]"
             >
