@@ -10,6 +10,106 @@ export type CustomStyle = {
   analysis: string;
 };
 
+export type StyleColors = {
+  bg: string;
+  fg: string;
+  accent: string;
+  surface: string;
+  headingFont: "serif" | "sans-serif" | "monospace";
+  bodyFont: "serif" | "sans-serif" | "monospace";
+  layout: "single-column" | "two-column" | "card-based" | "magazine";
+};
+
+function fontStack(kind: "serif" | "sans-serif" | "monospace"): string {
+  if (kind === "serif") return "Georgia, 'Playfair Display', 'Microsoft JhengHei', serif";
+  if (kind === "monospace") return "'JetBrains Mono', Consolas, monospace";
+  return "system-ui, -apple-system, 'Microsoft JhengHei', sans-serif";
+}
+
+export async function generateReportFromChunksAsHtml(
+  brandName: string,
+  chunks: RetrievedChunk[],
+  opts: ReportOptions,
+  colors: StyleColors,
+  generatedAt: string
+): Promise<{ content: string; citations: ReportCitation[] }> {
+  const citations: ReportCitation[] = chunks.map((c) => ({
+    id: c.id,
+    document_id: c.document_id,
+    filename: c.filename,
+  }));
+
+  const sectionList = opts.sections.length > 0 ? opts.sections : DEFAULT_SECTIONS[opts.lang];
+  const contextBlock = chunks.map((c, i) => `[${i + 1}] ${c.content}`).join("\n\n---\n\n");
+  const focusLine = opts.focus.trim() ? `\n## 主題重點\n${opts.focus.trim()}\n` : "";
+
+  const headingFontStack = fontStack(colors.headingFont);
+  const bodyFontStack = fontStack(colors.bodyFont);
+  const customStyleBlock = opts.customStyleAnalysis
+    ? `\n\n## 視覺風格指引\n${opts.customStyleAnalysis}\n`
+    : "";
+
+  const prompt = `你是 Loamia 的結案報表生成助理。產出**完整的 HTML 報告**，視覺上要盡可能對齊提供的客戶舊報表風格。
+
+## 重要：輸出規則
+- **第一個字必須是 \`<\`**，輸出純 HTML
+- **不要** \`\`\`html 包覆
+- **不要** \`<html>\` \`<body>\` 標籤；只輸出 body 內部結構
+- 用 \`<div>\` \`<section>\` \`<header>\` \`<article>\` 排版
+- **只能用 inline style 屬性**，不要 \`<style>\` 標籤、不要 class 名稱
+- **禁用** \`<script>\` \`<iframe>\` \`<link>\` \`<img>\` \`<a href>\`
+- **禁用** onClick / on* 任何事件屬性
+
+## 風格規格（嚴格遵循）
+- 整體背景色：${colors.bg}
+- 主要文字色：${colors.fg}
+- 強調色（標題/重點/分隔）：${colors.accent}
+- 卡片/區塊背景：${colors.surface}
+- 標題字型：style="font-family: ${headingFontStack};"
+- 內文字型：style="font-family: ${bodyFontStack};"
+- 版型概念：${colors.layout}
+${customStyleBlock}
+
+## 結構建議
+1. **封面區塊**（必有）：品牌名稱大字 + 報告標題 + 生成日期。可用色塊、邊框、置中。
+2. **每個段落是 \`<section>\`**，標題用 H2 強調色襯線/加粗
+3. **數字 KPI 可用卡片格子**：display: grid 或 flex
+4. **表格**：完整邊框、色彩明確
+5. 章節之間用色塊或細線分隔
+
+## 段落順序
+${sectionList.map((s, i) => `${i + 1}. ${s}`).join("\n")}
+
+## 內容規則（最重要）
+- **數字、事實、KPI 只能來自下方品牌資料**，絕對不可捏造
+- 引用具體資料時用 [n] 格式（例：「IG 互動率 5.7% [3]」）
+- 用繁體中文撰寫
+- 如果某段落資料中沒有相關內容，誠實寫「**本期資料中暫無相關資訊**」
+- 不要重複資料原文，要做歸納分析
+- 報告生成時間：${generatedAt}
+- 品牌名稱：${brandName}
+
+${focusLine}
+## 品牌資料
+${contextBlock}
+
+開始輸出 HTML：`;
+
+  const client = await anthropic();
+  const response = await client.messages.create({
+    model: CHAT_MODEL,
+    max_tokens: opts.length === "detailed" ? 8000 : opts.length === "short" ? 3000 : 5000,
+    messages: [{ role: "user", content: prompt }],
+  });
+
+  const block = response.content[0];
+  if (!block || block.type !== "text" || !block.text) {
+    throw new Error("HTML 生成沒回應");
+  }
+
+  return { content: block.text, citations };
+}
+
 export type ReportCitation = {
   id: string;
   document_id: string;

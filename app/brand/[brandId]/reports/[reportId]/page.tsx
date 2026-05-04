@@ -34,10 +34,12 @@ export default async function ReportDetailPage({
 
   const { data: report } = await supabase
     .from("brand_reports")
-    .select("id, title, content, citations, focus, created_at, style, style_colors")
+    .select("id, title, content, citations, focus, created_at, style, style_colors, format")
     .eq("id", reportId)
     .single();
   if (!report) notFound();
+
+  const isHtml = report.format === "html";
 
   const t = await getServerT();
   const citations = (report.citations as Citation[] | null) ?? [];
@@ -115,52 +117,80 @@ export default async function ReportDetailPage({
       </header>
 
       <div style={containerStyle} className="flex-1">
-        <article className="mx-auto max-w-3xl w-full px-4 md:px-6 py-10">
-          <div
-            className="mb-8 pb-6 border-b"
-            style={{ borderColor: accentColor }}
-          >
+        {isHtml ? (
+          <div className="mx-auto max-w-4xl w-full px-2 md:px-4 py-6">
             <div
-              className="text-xs font-mono tracking-widest mb-2"
-              style={accentStyle ?? { color: "var(--accent)" }}
-            >
-              {brand.name.toUpperCase()} · {t("reports.nav")}
-            </div>
-            <h1
-              className="text-2xl md:text-3xl font-bold leading-tight"
-              style={headingStyle}
-            >
-              {report.title}
-            </h1>
-            <div className="mt-3 text-xs opacity-70">
-              {t("reports.created")} {new Date(report.created_at).toLocaleString()}
-              {report.focus && <span> · {report.focus}</span>}
-            </div>
+              className="ai-report-html"
+              style={bodyStyle}
+              dangerouslySetInnerHTML={{ __html: report.content }}
+            />
+            {uniqueFiles.length > 0 && (
+              <div
+                className="mt-8 pt-4 border-t mx-2 md:mx-4"
+                style={{ borderColor: accentColor }}
+              >
+                <div
+                  className="text-xs font-mono tracking-widest mb-2 opacity-70"
+                  style={accentStyle}
+                >
+                  {t("reports.citation.label")}
+                </div>
+                <ul className="text-sm opacity-70 space-y-1">
+                  {uniqueFiles.map((f, i) => (
+                    <li key={i}>· {f}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </div>
-
-          <div className="markdown-body text-[15px] leading-[1.85]" style={bodyStyle}>
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>{report.content}</ReactMarkdown>
-          </div>
-
-          {uniqueFiles.length > 0 && (
+        ) : (
+          <article className="mx-auto max-w-3xl w-full px-4 md:px-6 py-10">
             <div
-              className="mt-12 pt-6 border-t"
+              className="mb-8 pb-6 border-b"
               style={{ borderColor: accentColor }}
             >
               <div
-                className="text-xs font-mono tracking-widest mb-3 opacity-70"
-                style={accentStyle}
+                className="text-xs font-mono tracking-widest mb-2"
+                style={accentStyle ?? { color: "var(--accent)" }}
               >
-                {t("reports.citation.label")}
+                {brand.name.toUpperCase()} · {t("reports.nav")}
               </div>
-              <ul className="text-sm opacity-70 space-y-1">
-                {uniqueFiles.map((f, i) => (
-                  <li key={i}>· {f}</li>
-                ))}
-              </ul>
+              <h1
+                className="text-2xl md:text-3xl font-bold leading-tight"
+                style={headingStyle}
+              >
+                {report.title}
+              </h1>
+              <div className="mt-3 text-xs opacity-70">
+                {t("reports.created")} {new Date(report.created_at).toLocaleString()}
+                {report.focus && <span> · {report.focus}</span>}
+              </div>
             </div>
-          )}
-        </article>
+
+            <div className="markdown-body text-[15px] leading-[1.85]" style={bodyStyle}>
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>{report.content}</ReactMarkdown>
+            </div>
+
+            {uniqueFiles.length > 0 && (
+              <div
+                className="mt-12 pt-6 border-t"
+                style={{ borderColor: accentColor }}
+              >
+                <div
+                  className="text-xs font-mono tracking-widest mb-3 opacity-70"
+                  style={accentStyle}
+                >
+                  {t("reports.citation.label")}
+                </div>
+                <ul className="text-sm opacity-70 space-y-1">
+                  {uniqueFiles.map((f, i) => (
+                    <li key={i}>· {f}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </article>
+        )}
       </div>
     </main>
   );

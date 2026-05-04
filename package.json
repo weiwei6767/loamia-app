@@ -12,6 +12,7 @@
     "@anthropic-ai/sdk": "^0.92.0",
     "@supabase/ssr": "^0.10.2",
     "@supabase/supabase-js": "^2.105.1",
+    "@types/sanitize-html": "^2.16.1",
     "docx": "^9.6.1",
     "mammoth": "^1.12.0",
     "next": "16.2.4",
@@ -20,7 +21,8 @@
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "react-markdown": "^10.1.0",
-    "remark-gfm": "^4.0.1"
+    "remark-gfm": "^4.0.1",
+    "sanitize-html": "^2.17.3"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",

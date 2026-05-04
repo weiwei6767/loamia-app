@@ -9,14 +9,17 @@ import {
   isRelevant,
   listBrandDocuments,
   generateReportFromChunks,
+  generateReportFromChunksAsHtml,
   makeAutoTitle,
   type Tone,
   type Length,
   type Lang,
   type ReportOptions,
+  type StyleColors,
 } from "@/lib/ai/report";
 import { isValidStyle, type StyleKey } from "@/lib/ai/styles";
 import { analyzeStyleFromImage } from "@/lib/ai/vision";
+import { sanitizeReportHtml } from "@/lib/sanitize";
 
 export type GenerateState =
   | undefined
@@ -86,7 +89,7 @@ export async function generateReport(
   if (!brand) return { error: "品牌不存在或無權限" };
 
   // Apply custom style analysis if specified
-  let styleColors: unknown = null;
+  let styleColors: StyleColors | null = null;
   if (customStyleId) {
     const { data: customStyle } = await supabase
       .from("custom_styles")
@@ -94,7 +97,7 @@ export async function generateReport(
       .eq("id", customStyleId)
       .single();
     if (customStyle?.analysis) opts.customStyleAnalysis = customStyle.analysis;
-    if (customStyle?.colors) styleColors = customStyle.colors;
+    if (customStyle?.colors) styleColors = customStyle.colors as StyleColors;
   }
 
   let chunks;
@@ -169,10 +172,29 @@ export async function generateReport(
 
   let content: string;
   let citations: unknown;
+  let format: "markdown" | "html" = "markdown";
   try {
-    const result = await generateReportFromChunks(brand.name, chunks, opts);
-    content = result.content;
-    citations = result.citations;
+    if (styleColors) {
+      // HTML mode — visual fidelity to reference image
+      const generatedAt = new Date().toLocaleDateString(opts.lang === "en" ? "en-US" : "zh-TW", {
+        year: "numeric",
+        month: "long",
+      });
+      const result = await generateReportFromChunksAsHtml(
+        brand.name,
+        chunks,
+        opts,
+        styleColors,
+        generatedAt
+      );
+      content = sanitizeReportHtml(result.content);
+      citations = result.citations;
+      format = "html";
+    } else {
+      const result = await generateReportFromChunks(brand.name, chunks, opts);
+      content = result.content;
+      citations = result.citations;
+    }
   } catch (err) {
     return { error: err instanceof Error ? err.message : "生成失敗" };
   }
@@ -191,6 +213,7 @@ export async function generateReport(
       focus: opts.focus || null,
       style: opts.style ?? null,
       style_colors: styleColors,
+      format,
     })
     .select("id")
     .single();
