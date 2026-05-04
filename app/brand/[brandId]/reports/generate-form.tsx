@@ -74,6 +74,7 @@ export function GenerateForm({
   const [presetName, setPresetName] = useState("");
   const [presetMsg, setPresetMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
   const [presetPending, setPresetPending] = useState(false);
+  const [activePreset, setActivePreset] = useState<string | null>("system:standard");
   const router = useRouter();
 
   async function handleSavePreset() {
@@ -114,6 +115,12 @@ export function GenerateForm({
 
   const setQuickTemplate = (key: keyof typeof SECTION_TEMPLATES) => {
     setSections(SECTION_TEMPLATES[key][lang]);
+    setActivePreset(`system:${key}`);
+  };
+
+  const applyUserPreset = (preset: SectionPreset) => {
+    setSections(preset.sections.join("\n"));
+    setActivePreset(`user:${preset.id}`);
   };
 
   const loadTemplate = (id: string) => {
@@ -126,6 +133,7 @@ export function GenerateForm({
     if (tpl.lang === "zh" || tpl.lang === "en") setLang(tpl.lang);
     if (tpl.style && tpl.style in STYLES) setStyle(tpl.style as StyleKey);
     else setStyle("");
+    setActivePreset(null);
   };
 
   return (
@@ -173,22 +181,30 @@ export function GenerateForm({
         </label>
 
         <div className="flex flex-wrap gap-1.5 items-center mb-2">
-          {(["standard", "campaign", "kol", "brief"] as const).map((k) => (
-            <button
-              key={k}
-              type="button"
-              onClick={() => setQuickTemplate(k)}
-              className="text-xs px-2.5 py-1 border border-[var(--line)] bg-[var(--surface-2)] hover:border-[var(--accent)] hover:text-[var(--accent)] transition"
-            >
-              {t(`reports.sections.template.${k}` as never)}
-            </button>
-          ))}
+          {(["standard", "campaign", "kol", "brief"] as const).map((k) => {
+            const active = activePreset === `system:${k}`;
+            return (
+              <button
+                key={k}
+                type="button"
+                onClick={() => setQuickTemplate(k)}
+                className={`text-xs px-2.5 py-1 border transition ${
+                  active
+                    ? "border-[var(--accent)] bg-[var(--accent)] text-[var(--background)] font-bold"
+                    : "border-[var(--line)] bg-[var(--surface-2)] hover:border-[var(--accent)] hover:text-[var(--accent)]"
+                }`}
+              >
+                {t(`reports.sections.template.${k}` as never)}
+              </button>
+            );
+          })}
           {sectionPresets.map((p) => (
             <UserPresetButton
               key={p.id}
               preset={p}
               brandId={brandId}
-              onApply={() => setSections(p.sections.join("\n"))}
+              active={activePreset === `user:${p.id}`}
+              onApply={() => applyUserPreset(p)}
             />
           ))}
 
@@ -224,7 +240,10 @@ export function GenerateForm({
           name="sections"
           rows={6}
           value={sections}
-          onChange={(e) => setSections(e.target.value)}
+          onChange={(e) => {
+            setSections(e.target.value);
+            setActivePreset(null);
+          }}
           className="w-full border border-[var(--line)] bg-[var(--surface-2)] px-3 py-2.5 text-sm font-mono leading-relaxed focus:border-[var(--accent)] focus:outline-none"
         />
       </div>
@@ -378,20 +397,26 @@ export function GenerateForm({
 function UserPresetButton({
   preset,
   brandId,
+  active,
   onApply,
 }: {
   preset: SectionPreset;
   brandId: string;
+  active: boolean;
   onApply: () => void;
 }) {
   const { t } = useI18n();
   const [pending, startTransition] = useTransition();
   return (
-    <span className="inline-flex items-center mr-1.5 mb-1.5 group">
+    <span className="inline-flex items-stretch">
       <button
         type="button"
         onClick={onApply}
-        className="text-xs px-2.5 py-1 border border-[var(--accent)]/40 bg-[var(--surface-2)] hover:border-[var(--accent)] hover:text-[var(--accent)] transition"
+        className={`text-xs px-2.5 py-1 border transition ${
+          active
+            ? "border-[var(--accent)] bg-[var(--accent)] text-[var(--background)] font-bold"
+            : "border-[var(--accent)]/40 bg-[var(--surface-2)] hover:border-[var(--accent)] hover:text-[var(--accent)]"
+        }`}
       >
         {preset.name}
       </button>
@@ -402,7 +427,11 @@ function UserPresetButton({
           if (!confirm(t("reports.section_preset.delete.confirm"))) return;
           startTransition(() => deleteSectionPreset(preset.id, brandId));
         }}
-        className="ml-px px-1.5 py-1 border border-l-0 border-[var(--accent)]/40 text-[var(--muted)] hover:text-red-400 disabled:opacity-50 text-xs"
+        className={`px-1.5 py-1 border border-l-0 text-xs disabled:opacity-50 ${
+          active
+            ? "border-[var(--accent)] bg-[var(--accent)] text-[var(--background)] hover:bg-red-400"
+            : "border-[var(--accent)]/40 text-[var(--muted)] hover:text-red-400"
+        }`}
         aria-label="delete"
       >
         ✕
