@@ -1,11 +1,13 @@
 "use server";
 
-import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { generateContentVariants, type ContentType } from "@/lib/ai/creative";
 
-export type ContentState = { error?: string } | undefined;
+export type ContentState =
+  | undefined
+  | { error: string }
+  | { success: true; outputId: string; type: string };
 
 const VALID_TYPES: ContentType[] = [
   "ig_post",
@@ -65,7 +67,7 @@ export async function generateContent(
   if (insertErr || !output) return { error: insertErr?.message ?? "儲存失敗" };
 
   revalidatePath(`/brand/${brandId}/content`);
-  redirect(`/brand/${brandId}/content`);
+  return { success: true, outputId: output.id as string, type };
 }
 
 export async function deleteContentOutput(outputId: string, brandId: string) {

@@ -26,10 +26,28 @@ export function SettingsWidget() {
   }, []);
 
   return (
-    <div ref={ref} className="fixed right-4 bottom-4 md:right-6 md:bottom-6 z-[100]">
+    <div ref={ref} className="fixed right-4 top-4 md:right-6 md:top-6 z-[100]">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-label={t("settings.label")}
+        aria-expanded={open}
+        className={`widget-glow group relative w-10 h-10 flex items-center justify-center border bg-[var(--surface)]/85 backdrop-blur-xl transition-all duration-300 ${
+          open ? "rotate-90" : ""
+        }`}
+        style={{
+          borderColor: open ? "color-mix(in srgb, var(--accent) 60%, transparent)" : "var(--line)",
+        }}
+      >
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-[var(--accent)]">
+          <circle cx="12" cy="12" r="3" />
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+        </svg>
+      </button>
+
       {open && (
         <div
-          className="mb-3 w-56 border bg-[var(--surface)]/85 backdrop-blur-xl shadow-2xl"
+          className="absolute right-0 top-full mt-2 w-56 border bg-[var(--surface)]/95 backdrop-blur-xl shadow-2xl"
           style={{
             borderColor: "var(--line)",
             animation: "widget-pop 0.2s cubic-bezier(0.16, 1, 0.3, 1)",
@@ -92,24 +110,6 @@ export function SettingsWidget() {
           </div>
         </div>
       )}
-
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        aria-label={t("settings.label")}
-        aria-expanded={open}
-        className={`widget-glow group relative w-12 h-12 flex items-center justify-center border bg-[var(--surface)]/80 backdrop-blur-xl transition-all duration-300 ${
-          open ? "rotate-90" : ""
-        }`}
-        style={{
-          borderColor: open ? "color-mix(in srgb, var(--accent) 60%, transparent)" : "var(--line)",
-        }}
-      >
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-[var(--accent)]">
-          <circle cx="12" cy="12" r="3" />
-          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
-        </svg>
-      </button>
     </div>
   );
 }
