@@ -1,0 +1,420 @@
+"use client";
+
+import { useEffect, useRef, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import { uploadDocument, deleteDocument } from "../actions";
+import { useI18n } from "@/lib/i18n/provider";
+
+type Doc = {
+  id: string;
+  filename: string;
+  status: "pending" | "processing" | "ready" | "error" | string;
+  byte_size: number | null;
+  created_at: string;
+  error_message: string | null;
+};
+
+type StagedFile = {
+  id: string;
+  file: File;
+};
+
+type ToastStatus = "uploading" | "done" | "error";
+
+type Toast = {
+  id: string;
+  filename: string;
+  status: ToastStatus;
+  error?: string;
+};
+
+const TOAST_AUTO_DISMISS_MS = 4000;
+
+function formatSize(bytes: number | null): string {
+  if (!bytes) return "—";
+  if (bytes < 1024) return `${bytes}B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)}KB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)}MB`;
+}
+
+export function DataView({ brandId, documents }: { brandId: string; documents: Doc[] }) {
+  const { t } = useI18n();
+  const router = useRouter();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [staged, setStaged] = useState<StagedFile[]>([]);
+  const [dragOver, setDragOver] = useState(false);
+  const [toasts, setToasts] = useState<Toast[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const [showList, setShowList] = useState(false);
+  const [search, setSearch] = useState("");
+  const [, startTransition] = useTransition();
+
+  const stats = {
+    total: documents.length,
+    ready: documents.filter((d) => d.status === "ready").length,
+    processing: documents.filter((d) => d.status === "processing" || d.status === "pending").length,
+    error: documents.filter((d) => d.status === "error").length,
+  };
+
+  const filteredDocs = search.trim()
+    ? documents.filter((d) => d.filename.toLowerCase().includes(search.toLowerCase()))
+    : documents;
+
+  function addFiles(files: FileList | File[]) {
+    const arr = Array.from(files);
+    setStaged((prev) => [
+      ...prev,
+      ...arr.map((file) => ({ id: crypto.randomUUID(), file })),
+    ]);
+  }
+
+  function removeStaged(id: string) {
+    setStaged((prev) => prev.filter((s) => s.id !== id));
+  }
+
+  function clearStaged() {
+    setStaged([]);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  }
+
+  function dismissToast(id: string) {
+    setToasts((prev) => prev.filter((t) => t.id !== id));
+  }
+
+  function updateToast(id: string, patch: Partial<Toast>) {
+    setToasts((prev) => prev.map((t) => (t.id === id ? { ...t, ...patch } : t)));
+  }
+
+  async function uploadAll() {
+    if (staged.length === 0 || uploading) return;
+    setUploading(true);
+
+    const items = staged.map((s) => {
+      const toastId = crypto.randomUUID();
+      return { staged: s, toastId };
+    });
+
+    setToasts((prev) => [
+      ...prev,
+      ...items.map(({ staged: s, toastId }) => ({
+        id: toastId,
+        filename: s.file.name,
+        status: "uploading" as ToastStatus,
+      })),
+    ]);
+
+    setStaged([]);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+
+    await Promise.all(
+      items.map(async ({ staged: s, toastId }) => {
+        const fd = new FormData();
+        fd.set("brandId", brandId);
+        fd.set("file", s.file);
+        try {
+          const result = await uploadDocument(undefined, fd);
+          if (result && "success" in result && result.success && !("error" in result && result.error)) {
+            updateToast(toastId, { status: "done" });
+            setTimeout(() => dismissToast(toastId), TOAST_AUTO_DISMISS_MS);
+          } else if (result && "error" in result && result.error) {
+            updateToast(toastId, { status: "error", error: result.error });
+          } else {
+            updateToast(toastId, { status: "done" });
+            setTimeout(() => dismissToast(toastId), TOAST_AUTO_DISMISS_MS);
+          }
+        } catch (err) {
+          updateToast(toastId, {
+            status: "error",
+            error: err instanceof Error ? err.message : "unknown",
+          });
+        }
+      })
+    );
+
+    setUploading(false);
+    router.refresh();
+  }
+
+  function handleDelete(docId: string) {
+    if (!confirm("確定刪除這個文件？")) return;
+    startTransition(() => deleteDocument(docId, brandId));
+  }
+
+  return (
+    <>
+      {/* Stats grid */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-px bg-[var(--line)] mb-8">
+        <StatCell label={t("data.stats.total")} value={stats.total} />
+        <StatCell label={t("data.stats.ready")} value={stats.ready} accent />
+        <StatCell label={t("data.stats.processing")} value={stats.processing} pulse />
+        <StatCell label={t("data.stats.error")} value={stats.error} danger />
+      </div>
+
+      {/* Drop zone */}
+      <div
+        onDragOver={(e) => {
+          e.preventDefault();
+          setDragOver(true);
+        }}
+        onDragLeave={() => setDragOver(false)}
+        onDrop={(e) => {
+          e.preventDefault();
+          setDragOver(false);
+          if (e.dataTransfer.files.length > 0) addFiles(e.dataTransfer.files);
+        }}
+        className={`relative border-2 border-dashed transition-all duration-200 ${
+          dragOver ? "dropzone-active" : "border-[var(--line)] tech-grid-bg hover:border-[var(--accent)]/50"
+        }`}
+      >
+        <input
+          ref={fileInputRef}
+          type="file"
+          multiple
+          accept=".txt,.md,.pdf,.docx,.xlsx,.xls,.csv,.pptx,.ppt"
+          onChange={(e) => {
+            if (e.target.files && e.target.files.length > 0) addFiles(e.target.files);
+          }}
+          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+          aria-label="upload"
+        />
+        <div className="relative pointer-events-none p-10 text-center">
+          <div className="font-mono text-5xl text-[var(--accent)] mb-3 tracking-widest">▲</div>
+          <div className="font-mono text-sm tracking-widest text-[var(--accent)]">
+            {t("data.dropzone.title")}
+          </div>
+          <div className="mt-2 text-xs text-[var(--muted)]">
+            {t("data.dropzone.or")}{" "}
+            <span className="text-[var(--accent)] underline">{t("data.dropzone.click")}</span>
+          </div>
+          <div className="mt-4 text-[10px] tracking-wider text-[var(--muted)] font-mono">
+            {t("data.dropzone.formats")}
+          </div>
+        </div>
+      </div>
+
+      {/* Staged files */}
+      {staged.length > 0 && (
+        <div className="mt-4 border border-[var(--line)] bg-[var(--surface)] p-4">
+          <div className="flex items-center justify-between mb-3">
+            <div className="font-mono text-xs tracking-widest text-[var(--accent)]">
+              {t("data.staged.title")} · {staged.length}
+            </div>
+            <button
+              type="button"
+              onClick={clearStaged}
+              className="text-xs text-[var(--muted)] hover:text-red-400"
+            >
+              {t("data.staged.clear")}
+            </button>
+          </div>
+          <ul className="space-y-1.5 mb-4">
+            {staged.map((s) => (
+              <li
+                key={s.id}
+                className="flex items-center justify-between gap-2 text-sm bg-[var(--surface-2)] px-3 py-2"
+              >
+                <span className="truncate flex-1">{s.file.name}</span>
+                <span className="text-xs text-[var(--muted)] shrink-0">
+                  {formatSize(s.file.size)}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => removeStaged(s.id)}
+                  className="text-[var(--muted)] hover:text-red-400 px-1"
+                  aria-label="remove"
+                >
+                  ✕
+                </button>
+              </li>
+            ))}
+          </ul>
+          <button
+            type="button"
+            onClick={uploadAll}
+            disabled={uploading}
+            className="w-full sm:w-auto px-6 py-2 bg-[var(--accent)] text-[var(--background)] font-bold text-sm hover:bg-[var(--accent-glow)] disabled:opacity-50 inline-flex items-center justify-center gap-2"
+          >
+            {uploading ? <span className="spinner" /> : "↑"} {t("data.staged.upload")} · {staged.length}
+          </button>
+        </div>
+      )}
+
+      {/* Saved list (collapsed) */}
+      <div className="mt-8">
+        <button
+          type="button"
+          onClick={() => setShowList((v) => !v)}
+          className="w-full text-left flex items-center justify-between px-4 py-3 border border-[var(--line)] bg-[var(--surface)] hover:border-[var(--accent)]/50 transition"
+        >
+          <span className="font-mono text-xs tracking-widest text-[var(--muted)]">
+            {t("data.list.expand")} · {documents.length}
+          </span>
+          <span className="text-[var(--accent)] text-sm">{showList ? "▲" : "▼"}</span>
+        </button>
+
+        {showList && (
+          <div className="mt-3 space-y-3">
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              type="text"
+              placeholder={t("data.list.search")}
+              className="w-full text-sm px-3 py-2 border border-[var(--line)] bg-[var(--surface-2)] focus:border-[var(--accent)] focus:outline-none"
+            />
+            {filteredDocs.length === 0 ? (
+              <p className="text-sm text-[var(--muted)] py-4 text-center">—</p>
+            ) : (
+              <ul className="space-y-2">
+                {filteredDocs.map((d) => (
+                  <li
+                    key={d.id}
+                    className="border border-[var(--line)] bg-[var(--surface-2)] p-3 flex items-start justify-between gap-3"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate font-medium text-sm">{d.filename}</div>
+                      <div className="mt-1 text-xs text-[var(--muted)] flex items-center gap-2 font-mono">
+                        <StatusDot status={d.status} />
+                        <span>{statusLabel(d.status, t)}</span>
+                        <span>·</span>
+                        <span>{formatSize(d.byte_size)}</span>
+                      </div>
+                      {d.error_message && (
+                        <div className="mt-1 text-xs text-red-400 break-words">{d.error_message}</div>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => handleDelete(d.id)}
+                      className="text-[var(--muted)] hover:text-red-400 shrink-0"
+                      aria-label="delete"
+                    >
+                      ✕
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Toast container — fixed bottom-right */}
+      <div className="fixed bottom-20 right-4 md:right-6 z-50 space-y-2 max-w-[360px] w-[calc(100vw-2rem)]">
+        {toasts.map((toast) => (
+          <ToastItem key={toast.id} toast={toast} onDismiss={() => dismissToast(toast.id)} />
+        ))}
+      </div>
+    </>
+  );
+}
+
+function StatCell({
+  label,
+  value,
+  accent,
+  pulse,
+  danger,
+}: {
+  label: string;
+  value: number;
+  accent?: boolean;
+  pulse?: boolean;
+  danger?: boolean;
+}) {
+  const color = danger
+    ? "text-red-400"
+    : accent
+      ? "text-[var(--accent)]"
+      : pulse
+        ? "text-yellow-400"
+        : "text-[var(--foreground)]";
+  return (
+    <div className="bg-[var(--surface)] p-4 sm:p-5 flex flex-col gap-1">
+      <div className="font-mono text-[10px] tracking-widest text-[var(--muted)]">{label}</div>
+      <div className={`font-mono font-bold text-3xl tabular ${color}`}>
+        {String(value).padStart(2, "0")}
+        {pulse && value > 0 && (
+          <span className="ml-2 inline-block w-2 h-2 rounded-full bg-yellow-400 align-middle"
+            style={{ animation: "pulse-dot 1.4s ease-in-out infinite" }}
+          />
+        )}
+      </div>
+    </div>
+  );
+}
+
+function StatusDot({ status }: { status: string }) {
+  const colors: Record<string, string> = {
+    ready: "bg-[var(--accent)]",
+    processing: "bg-yellow-400",
+    pending: "bg-yellow-400",
+    error: "bg-red-400",
+  };
+  const cls = colors[status] ?? "bg-[var(--muted)]";
+  const animated = status === "processing" || status === "pending";
+  return (
+    <span
+      className={`w-1.5 h-1.5 rounded-full ${cls} inline-block`}
+      style={animated ? { animation: "pulse-dot 1.4s ease-in-out infinite" } : undefined}
+    />
+  );
+}
+
+function statusLabel(status: string, t: (k: never) => string): string {
+  if (status === "ready") return "READY";
+  if (status === "processing") return "PROCESSING";
+  if (status === "pending") return "PENDING";
+  if (status === "error") return "ERROR";
+  return status.toUpperCase();
+}
+
+function ToastItem({ toast, onDismiss }: { toast: Toast; onDismiss: () => void }) {
+  const { t } = useI18n();
+  const isError = toast.status === "error";
+  const isDone = toast.status === "done";
+  const isUploading = toast.status === "uploading";
+
+  return (
+    <div
+      style={{ animation: "toast-in 0.25s cubic-bezier(0.16, 1, 0.3, 1)" }}
+      className={`border bg-[var(--surface)] backdrop-blur-xl shadow-2xl ${
+        isError
+          ? "border-red-400/50"
+          : isDone
+            ? "border-[var(--accent)]/50"
+            : "border-[var(--line)]"
+      }`}
+    >
+      <div className="px-4 py-3 flex items-center gap-3">
+        <span
+          className={`w-2 h-2 rounded-full shrink-0 ${
+            isError ? "bg-red-400" : isDone ? "bg-[var(--accent)]" : "bg-yellow-400"
+          }`}
+          style={
+            isUploading ? { animation: "pulse-dot 1.4s ease-in-out infinite" } : undefined
+          }
+        />
+        <div className="min-w-0 flex-1">
+          <div className="text-sm truncate font-medium">{toast.filename}</div>
+          <div
+            className={`text-xs font-mono mt-0.5 tracking-wide ${
+              isError ? "text-red-400" : isDone ? "text-[var(--accent)]" : "text-[var(--muted)]"
+            }`}
+          >
+            {isError ? `✕ ${t("data.toast.error")}` : isDone ? `✓ ${t("data.toast.done")}` : `↑ ${t("data.toast.uploading")}...`}
+          </div>
+          {isError && toast.error && (
+            <div className="text-[10px] text-red-400 mt-0.5 break-words">{toast.error}</div>
+          )}
+        </div>
+        <button
+          type="button"
+          onClick={onDismiss}
+          className="text-[var(--muted)] hover:text-[var(--foreground)] text-sm shrink-0"
+          aria-label="dismiss"
+        >
+          ✕
+        </button>
+      </div>
+    </div>
+  );
+}

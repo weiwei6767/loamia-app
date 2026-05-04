@@ -83,6 +83,36 @@ body {
   to { opacity: 1; }
 }
 
+@keyframes toast-in {
+  from { opacity: 0; transform: translateX(20px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes toast-out {
+  from { opacity: 1; transform: translateX(0); }
+  to { opacity: 0; transform: translateX(20px); }
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 0.3; }
+  50% { opacity: 1; }
+}
+
+.tech-grid-bg {
+  background-image:
+    linear-gradient(to right, rgba(212, 255, 0, 0.04) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(212, 255, 0, 0.04) 1px, transparent 1px);
+  background-size: 40px 40px;
+}
+
+.dropzone-active {
+  background-image:
+    linear-gradient(to right, rgba(212, 255, 0, 0.12) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(212, 255, 0, 0.12) 1px, transparent 1px);
+  background-size: 24px 24px;
+  border-color: var(--accent);
+}
+
 @keyframes widget-pop {
   from { opacity: 0; transform: translateY(8px) scale(0.95); }
   to { opacity: 1; transform: translateY(0) scale(1); }

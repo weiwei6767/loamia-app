@@ -2,9 +2,8 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getServerT } from "@/lib/i18n/server";
-import { Uploader } from "../uploader";
-import { DocumentList } from "../document-list";
 import { BrandStatusToggle } from "../brand-status-toggle";
+import { DataView } from "./data-view";
 
 type Doc = {
   id: string;
@@ -13,8 +12,6 @@ type Doc = {
   byte_size: number | null;
   created_at: string;
   error_message: string | null;
-  tags: string[] | null;
-  period: string | null;
 };
 
 export default async function DataPage({
@@ -36,7 +33,7 @@ export default async function DataPage({
 
   const { data: documents } = await supabase
     .from("documents")
-    .select("id, filename, status, byte_size, created_at, error_message, tags, period")
+    .select("id, filename, status, byte_size, created_at, error_message")
     .eq("brand_id", brand.id)
     .order("created_at", { ascending: false });
 
@@ -90,33 +87,16 @@ export default async function DataPage({
         </div>
       </header>
 
-      <section className="mx-auto max-w-5xl w-full px-4 md:px-6 py-10 space-y-10">
-        <div>
+      <section className="mx-auto max-w-5xl w-full px-4 md:px-6 py-10">
+        <div className="mb-8">
           <div className="font-mono text-xs tracking-widest text-[var(--accent)]">
-            {t("data.nav")}
+            {t("data.nav")} · {brand.name.toUpperCase()}
           </div>
           <h2 className="mt-2 text-2xl md:text-3xl font-bold">{t("data.title")}</h2>
           <p className="mt-2 text-sm text-[var(--muted)]">{t("data.subtitle")}</p>
         </div>
 
-        <section>
-          <div className="mb-3">
-            <h3 className="font-mono text-sm tracking-widest text-[var(--accent)]">
-              📄 {t("data.docs.section")}
-            </h3>
-            <p className="mt-1 text-xs text-[var(--muted)]">{t("data.docs.help")}</p>
-          </div>
-
-          <div className="border border-[var(--line)] bg-[var(--surface)] p-5 mb-5">
-            <Uploader brandId={brand.id} />
-          </div>
-
-          {docs.length === 0 ? (
-            <p className="text-sm text-[var(--muted)]">{t("data.docs.empty")}</p>
-          ) : (
-            <DocumentList brandId={brand.id} documents={docs} />
-          )}
-        </section>
+        <DataView brandId={brand.id} documents={docs} />
       </section>
     </main>
   );
