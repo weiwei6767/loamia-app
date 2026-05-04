@@ -16,11 +16,10 @@ export async function extractText({ buffer, mimeType, filename }: ExtractInput):
     lower.endsWith(".docx");
 
   if (isPdf) {
-    const mod = await import("pdf-parse");
-    const pdfParse = (mod as { default?: unknown }).default ?? mod;
-    const fn = pdfParse as (b: Buffer) => Promise<{ text: string }>;
-    const result = await fn(buffer);
-    return result.text;
+    const { extractText } = await import("unpdf");
+    const result = await extractText(new Uint8Array(buffer));
+    if (Array.isArray(result.text)) return result.text.join("\n");
+    return String(result.text ?? "");
   }
 
   if (isDocx) {
