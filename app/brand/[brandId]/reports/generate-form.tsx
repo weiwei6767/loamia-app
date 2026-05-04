@@ -10,7 +10,6 @@ import {
   deleteSectionPreset,
   type GenerateState,
   type SaveTemplateState,
-  type SectionPresetState,
 } from "./actions";
 import { useI18n } from "@/lib/i18n/provider";
 import { Uploader } from "../uploader";
@@ -72,7 +71,36 @@ export function GenerateForm({
   const [lang, setLang] = useState<"zh" | "en">(locale);
   const [style, setStyle] = useState<StyleKey | "">("");
   const [showSave, setShowSave] = useState(false);
-  const [showSavePreset, setShowSavePreset] = useState(false);
+  const [presetName, setPresetName] = useState("");
+  const [presetMsg, setPresetMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
+  const [presetPending, setPresetPending] = useState(false);
+  const router = useRouter();
+
+  async function handleSavePreset() {
+    setPresetMsg(null);
+    if (!presetName.trim()) {
+      setPresetMsg({ kind: "err", text: "請輸入模板名稱" });
+      return;
+    }
+    setPresetPending(true);
+    try {
+      const fd = new FormData();
+      fd.set("presetName", presetName);
+      fd.set("sections", sections);
+      fd.set("brandId", brandId);
+      const result = await saveSectionPreset(undefined, fd);
+      if (result && "success" in result && result.success) {
+        setPresetMsg({ kind: "ok", text: result.success });
+        setPresetName("");
+        router.refresh();
+        setTimeout(() => setPresetMsg(null), 2000);
+      } else if (result && "error" in result && result.error) {
+        setPresetMsg({ kind: "err", text: result.error });
+      }
+    } finally {
+      setPresetPending(false);
+    }
+  }
 
   const errorText = (() => {
     if (!state || !("error" in state) || !state.error) return null;
@@ -140,37 +168,21 @@ export function GenerateForm({
       </div>
 
       <div>
-        <div className="flex items-center justify-between mb-2">
-          <label htmlFor="sections" className="text-xs font-medium tracking-wide text-[var(--muted)]">
-            {t("reports.sections.label")}
-          </label>
-        </div>
+        <label htmlFor="sections" className="mb-2 block text-xs font-medium tracking-wide text-[var(--muted)]">
+          {t("reports.sections.label")}
+        </label>
 
-        {/* System templates */}
-        <div className="mb-1.5">
-          <span className="text-[10px] tracking-widest text-[var(--muted)] mr-2">
-            {t("reports.section_preset.system")}：
-          </span>
+        <div className="flex flex-wrap gap-1.5 items-center mb-2">
           {(["standard", "campaign", "kol", "brief"] as const).map((k) => (
             <button
               key={k}
               type="button"
               onClick={() => setQuickTemplate(k)}
-              className="text-xs px-2.5 py-1 mr-1.5 mb-1.5 border border-[var(--line)] bg-[var(--surface-2)] hover:border-[var(--accent)] hover:text-[var(--accent)] transition"
+              className="text-xs px-2.5 py-1 border border-[var(--line)] bg-[var(--surface-2)] hover:border-[var(--accent)] hover:text-[var(--accent)] transition"
             >
               {t(`reports.sections.template.${k}` as never)}
             </button>
           ))}
-        </div>
-
-        {/* User presets */}
-        <div className="mb-2">
-          <span className="text-[10px] tracking-widest text-[var(--muted)] mr-2">
-            {t("reports.section_preset.mine")}：
-          </span>
-          {sectionPresets.length === 0 && (
-            <span className="text-[10px] text-[var(--muted)] italic">—</span>
-          )}
           {sectionPresets.map((p) => (
             <UserPresetButton
               key={p.id}
@@ -179,14 +191,33 @@ export function GenerateForm({
               onApply={() => setSections(p.sections.join("\n"))}
             />
           ))}
-          <button
-            type="button"
-            onClick={() => setShowSavePreset((v) => !v)}
-            className="text-xs px-2.5 py-1 mr-1.5 mb-1.5 border border-dashed border-[var(--accent)] text-[var(--accent)] hover:bg-[var(--accent)] hover:text-[var(--background)] transition"
-          >
-            {showSavePreset ? "× 取消" : t("reports.section_preset.save")}
-          </button>
+
+          {/* Inline save: name + button */}
+          <span className="inline-flex items-stretch">
+            <input
+              type="text"
+              value={presetName}
+              onChange={(e) => setPresetName(e.target.value)}
+              maxLength={60}
+              placeholder={t("reports.section_preset.name.placeholder")}
+              className="text-xs px-2 py-1 w-44 border border-[var(--line)] bg-[var(--surface-2)] focus:border-[var(--accent)] focus:outline-none"
+            />
+            <button
+              type="button"
+              onClick={handleSavePreset}
+              disabled={presetPending}
+              className="text-xs px-3 py-1 border border-l-0 border-[var(--accent)] bg-[var(--accent)] text-[var(--background)] font-bold hover:bg-[var(--accent-glow)] disabled:opacity-50"
+            >
+              {presetPending ? "..." : t("reports.template.save.confirm")}
+            </button>
+          </span>
         </div>
+
+        {presetMsg && (
+          <p className={`text-xs mb-2 ${presetMsg.kind === "ok" ? "text-[var(--accent)]" : "text-red-400"}`}>
+            {presetMsg.text}
+          </p>
+        )}
 
         <textarea
           id="sections"
@@ -340,14 +371,6 @@ export function GenerateForm({
         onDone={() => setShowSave(false)}
       />
     )}
-
-    {showSavePreset && (
-      <SaveSectionPresetInline
-        brandId={brandId}
-        sections={sections}
-        onDone={() => setShowSavePreset(false)}
-      />
-    )}
     </div>
   );
 }
@@ -388,55 +411,6 @@ function UserPresetButton({
   );
 }
 
-function SaveSectionPresetInline({
-  brandId,
-  sections,
-  onDone,
-}: {
-  brandId: string;
-  sections: string;
-  onDone: () => void;
-}) {
-  const { t } = useI18n();
-  const router = useRouter();
-  const [state, action, pending] = useActionState<SectionPresetState, FormData>(saveSectionPreset, undefined);
-
-  useEffect(() => {
-    if (state && "success" in state && state.success) {
-      router.refresh();
-      const timer = setTimeout(onDone, 800);
-      return () => clearTimeout(timer);
-    }
-  }, [state, router, onDone]);
-
-  return (
-    <form action={action} className="p-3 border border-[var(--accent)]/40 bg-[var(--surface-2)] flex flex-wrap items-center gap-2">
-      <input type="hidden" name="brandId" value={brandId} />
-      <input type="hidden" name="sections" value={sections} />
-      <input
-        name="presetName"
-        type="text"
-        required
-        maxLength={60}
-        placeholder={t("reports.section_preset.name.placeholder")}
-        className="flex-1 min-w-[200px] border border-[var(--line)] bg-[var(--surface)] px-3 py-2 text-sm focus:border-[var(--accent)] focus:outline-none"
-      />
-      <button
-        type="submit"
-        disabled={pending}
-        className="bg-[var(--accent)] px-4 py-2 text-xs font-bold tracking-wide text-[var(--background)] hover:bg-[var(--accent-glow)] disabled:opacity-50"
-      >
-        {pending ? "..." : t("reports.template.save.confirm")}
-      </button>
-      {state && "error" in state && state.error && (
-        <span className="w-full text-xs text-red-400">{state.error}</span>
-      )}
-      {state && "success" in state && state.success && (
-        <span className="w-full text-xs text-[var(--accent)]">{state.success}</span>
-      )}
-    </form>
-  );
-}
 
 function SaveTemplateInline({
   brandId,
