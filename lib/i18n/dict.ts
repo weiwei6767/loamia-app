@@ -51,7 +51,7 @@ export const dict = {
   "brand.upload": { zh: "UPLOAD", en: "UPLOAD" },
   "brand.upload.button": { zh: "上傳並處理", en: "Upload & process" },
   "brand.upload.processing": { zh: "處理中...", en: "Processing..." },
-  "brand.upload.help": { zh: "支援 .txt / .md / .pdf / .docx，50MB 內", en: ".txt / .md / .pdf / .docx, up to 50MB" },
+  "brand.upload.help": { zh: "支援 .pdf / .docx / .xlsx / .xls / .csv / .pptx / .ppt / .txt / .md，可一次選多個檔案，每個 50MB 內", en: ".pdf / .docx / .xlsx / .xls / .csv / .pptx / .ppt / .txt / .md, multiple files OK, 50MB each" },
   "brand.upload.error.choose": { zh: "請選擇檔案", en: "Please choose a file" },
   "brand.upload.error.size": { zh: "檔案不能超過 50MB", en: "File must be under 50MB" },
   "brand.upload.tags": { zh: "標籤（用逗號分隔）", en: "Tags (comma separated)" },

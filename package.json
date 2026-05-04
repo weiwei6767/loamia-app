@@ -14,6 +14,7 @@
     "@supabase/supabase-js": "^2.105.1",
     "@types/sanitize-html": "^2.16.1",
     "docx": "^9.6.1",
+    "jszip": "^3.10.1",
     "mammoth": "^1.12.0",
     "next": "16.2.4",
     "openai": "^6.35.0",
@@ -22,7 +23,8 @@
     "react-markdown": "^10.1.0",
     "remark-gfm": "^4.0.1",
     "sanitize-html": "^2.17.3",
-    "unpdf": "^1.6.2"
+    "unpdf": "^1.6.2",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",

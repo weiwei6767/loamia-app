@@ -7,32 +7,13 @@ import { extractText, chunkText, buildChunkRows } from "@/lib/ai/ingest";
 
 export type UploadState = { error?: string; success?: string } | undefined;
 
-export async function uploadDocument(
-  _state: UploadState,
-  formData: FormData
-): Promise<UploadState> {
-  const file = formData.get("file") as File | null;
-  const brandId = String(formData.get("brandId") ?? "");
-  const tagsRaw = String(formData.get("tags") ?? "").trim();
-  const period = String(formData.get("period") ?? "").trim();
-  const tags = tagsRaw
-    ? tagsRaw.split(/[,，;；]/).map((t) => t.trim()).filter(Boolean).slice(0, 8)
-    : [];
-
-  if (!file || file.size === 0) return { error: "請選擇檔案" };
-  if (!brandId) return { error: "缺少 brandId" };
-  if (file.size > 50 * 1024 * 1024) return { error: "檔案不能超過 50MB" };
-
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { error: "未登入" };
-
-  const { data: brand } = await supabase
-    .from("brands")
-    .select("id, agency_id")
-    .eq("id", brandId)
-    .single();
-  if (!brand) return { error: "品牌不存在或無權限" };
+async function ingestSingleFile(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  file: File,
+  brand: { id: string; agency_id: string }
+): Promise<{ ok: true; filename: string } | { ok: false; filename: string; error: string }> {
+  if (file.size === 0) return { ok: false, filename: file.name, error: "空檔案" };
+  if (file.size > 50 * 1024 * 1024) return { ok: false, filename: file.name, error: "超過 50MB" };
 
   const buffer = Buffer.from(await file.arrayBuffer());
   const ext = file.name.includes(".") ? file.name.slice(file.name.lastIndexOf(".")) : "";
@@ -42,7 +23,7 @@ export async function uploadDocument(
   const { error: uploadErr } = await supabase.storage
     .from("documents")
     .upload(storagePath, buffer, { contentType: file.type, upsert: false });
-  if (uploadErr) return { error: `上傳失敗：${uploadErr.message}` };
+  if (uploadErr) return { ok: false, filename: file.name, error: `上傳失敗：${uploadErr.message}` };
 
   const { data: doc, error: docErr } = await supabase
     .from("documents")
@@ -54,12 +35,10 @@ export async function uploadDocument(
       mime_type: file.type,
       byte_size: file.size,
       status: "processing",
-      tags,
-      period: period || null,
     })
     .select()
     .single();
-  if (docErr || !doc) return { error: docErr?.message ?? "建立 document 失敗" };
+  if (docErr || !doc) return { ok: false, filename: file.name, error: docErr?.message ?? "建立 document 失敗" };
 
   try {
     console.log(`[ingest] start ${file.name} (${file.size}B, ${file.type})`);
@@ -80,18 +59,58 @@ export async function uploadDocument(
 
     await supabase.from("documents").update({ status: "ready" }).eq("id", doc.id);
     console.log(`[ingest] done ${file.name}`);
+    return { ok: true, filename: file.name };
   } catch (err) {
     console.error(`[ingest] failed ${file.name}:`, err);
-    const msg = err instanceof Error ? `${err.message}${err.cause ? ` (cause: ${err.cause})` : ""}` : "ingest 失敗";
+    const msg = err instanceof Error ? err.message : "ingest 失敗";
     await supabase
       .from("documents")
       .update({ status: "error", error_message: msg })
       .eq("id", doc.id);
-    return { error: msg };
+    return { ok: false, filename: file.name, error: msg };
   }
+}
+
+export async function uploadDocument(
+  _state: UploadState,
+  formData: FormData
+): Promise<UploadState> {
+  const files = formData.getAll("file").filter((f): f is File => f instanceof File && f.size > 0);
+  const brandId = String(formData.get("brandId") ?? "");
+
+  if (files.length === 0) return { error: "請選擇檔案" };
+  if (!brandId) return { error: "缺少 brandId" };
+
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "未登入" };
+
+  const { data: brand } = await supabase
+    .from("brands")
+    .select("id, agency_id")
+    .eq("id", brandId)
+    .single();
+  if (!brand) return { error: "品牌不存在或無權限" };
+
+  const results = await Promise.all(
+    files.map((f) => ingestSingleFile(supabase, f, brand))
+  );
+
+  const successes = results.filter((r) => r.ok);
+  const failures = results.filter((r): r is { ok: false; filename: string; error: string } => !r.ok);
 
   revalidatePath(`/brand/${brandId}`);
-  return { success: `已處理：${file.name}` };
+
+  if (failures.length > 0) {
+    const detail = failures.map((f) => `${f.filename}：${f.error}`).join("\n");
+    if (successes.length === 0) return { error: detail };
+    return {
+      success: `成功 ${successes.length} 個 / 失敗 ${failures.length} 個`,
+      error: detail,
+    } as unknown as UploadState;
+  }
+
+  return { success: `已處理 ${successes.length} 個檔案` };
 }
 
 export async function deleteDocument(documentId: string, brandId: string) {
