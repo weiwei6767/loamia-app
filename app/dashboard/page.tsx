@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getServerT } from "@/lib/i18n/server";
 import { logout } from "@/app/auth/actions";
 import { BrandCreate } from "./brand-create";
 
@@ -23,17 +24,19 @@ export default async function DashboardPage() {
     .eq("agency_id", agency.id)
     .order("created_at", { ascending: false });
 
+  const t = await getServerT();
+
   return (
     <main className="min-h-screen">
       <header className="border-b border-[var(--line)]">
         <div className="mx-auto max-w-6xl flex items-center justify-between px-6 py-4">
-          <div>
-            <div className="font-mono text-lg font-bold tracking-tight text-[var(--accent)]">LOAMIA</div>
+          <div className="flex items-center gap-3">
+            <img src="/logo.png" alt="LOAMIA" className="h-8 w-auto" />
             <div className="text-xs text-[var(--muted)]">{agency.name}</div>
           </div>
           <form action={logout}>
             <button type="submit" className="text-xs text-[var(--muted)] hover:text-[var(--foreground)]">
-              登出
+              {t("dashboard.logout")}
             </button>
           </form>
         </div>
@@ -42,8 +45,8 @@ export default async function DashboardPage() {
       <section className="mx-auto max-w-6xl px-6 py-12">
         <div className="mb-10 flex items-end justify-between">
           <div>
-            <div className="font-mono text-xs tracking-widest text-[var(--accent)]">BRANDS</div>
-            <h1 className="mt-2 text-2xl font-bold">客戶品牌</h1>
+            <div className="font-mono text-xs tracking-widest text-[var(--accent)]">{t("dashboard.section")}</div>
+            <h1 className="mt-2 text-2xl font-bold">{t("dashboard.title")}</h1>
           </div>
         </div>
 
@@ -58,13 +61,13 @@ export default async function DashboardPage() {
             >
               <div className="font-medium">{b.name}</div>
               <div className="mt-2 text-xs text-[var(--muted)]">
-                {b.status === "active" ? "● 活躍" : "○ 封存"}
+                {b.status === "active" ? t("dashboard.brand.active") : t("dashboard.brand.archived")}
               </div>
             </Link>
           ))}
           {(!brands || brands.length === 0) && (
             <div className="col-span-full text-sm text-[var(--muted)]">
-              還沒有品牌——上方建一個吧。
+              {t("dashboard.brand.empty")}
             </div>
           )}
         </div>

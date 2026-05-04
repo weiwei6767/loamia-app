@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getServerT } from "@/lib/i18n/server";
 import { Uploader } from "./uploader";
 import { Chat } from "./chat";
 import { DocumentList } from "./document-list";
@@ -68,6 +69,8 @@ export default async function BrandPage({
     initialMessages = (msgs ?? []) as StoredMessage[];
   }
 
+  const t = await getServerT();
+
   return (
     <main className="min-h-screen flex flex-col">
       <header className="border-b border-[var(--line)]">
@@ -77,10 +80,10 @@ export default async function BrandPage({
               href="/dashboard"
               className="text-xs text-[var(--muted)] hover:text-[var(--foreground)] shrink-0"
             >
-              ← 返回
+              {t("brand.back")}
             </Link>
             <div className="min-w-0">
-              <div className="text-xs font-mono tracking-widest text-[var(--accent)]">BRAND</div>
+              <div className="text-xs font-mono tracking-widest text-[var(--accent)]">{t("brand.label")}</div>
               <h1 className="text-lg font-bold truncate">{brand.name}</h1>
             </div>
           </div>
@@ -95,11 +98,11 @@ export default async function BrandPage({
 
         <aside className="border-r border-[var(--line)] p-5 space-y-6 lg:max-h-[calc(100vh-65px)] lg:overflow-y-auto xl:block hidden">
           <section>
-            <div className="text-xs font-mono tracking-widest text-[var(--muted)] mb-3">UPLOAD</div>
+            <div className="text-xs font-mono tracking-widest text-[var(--muted)] mb-3">{t("brand.upload")}</div>
             <Uploader brandId={brand.id} />
           </section>
           <section>
-            <div className="text-xs font-mono tracking-widest text-[var(--muted)] mb-3">DOCUMENTS</div>
+            <div className="text-xs font-mono tracking-widest text-[var(--muted)] mb-3">{t("brand.documents")}</div>
             <DocumentList brandId={brand.id} documents={documents ?? []} />
           </section>
         </aside>

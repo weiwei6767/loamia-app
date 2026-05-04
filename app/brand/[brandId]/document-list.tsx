@@ -2,6 +2,7 @@
 
 import { useTransition } from "react";
 import { deleteDocument } from "./actions";
+import { useI18n } from "@/lib/i18n/provider";
 
 type Doc = {
   id: string;
@@ -20,10 +21,11 @@ function formatSize(bytes: number | null) {
 }
 
 export function DocumentList({ brandId, documents }: { brandId: string; documents: Doc[] }) {
+  const { t } = useI18n();
   const [pending, startTransition] = useTransition();
 
   if (documents.length === 0) {
-    return <p className="text-xs text-[var(--muted)]">還沒有文件</p>;
+    return <p className="text-xs text-[var(--muted)]">{t("brand.doc.empty")}</p>;
   }
 
   return (
@@ -36,10 +38,10 @@ export function DocumentList({ brandId, documents }: { brandId: string; document
           <div className="min-w-0 flex-1">
             <div className="truncate font-medium">{d.filename}</div>
             <div className="mt-1 text-[var(--muted)]">
-              {d.status === "ready" && <span className="text-[var(--accent)]">● 已處理</span>}
-              {d.status === "processing" && <span className="text-yellow-400">● 處理中</span>}
-              {d.status === "error" && <span className="text-red-400">● 錯誤</span>}
-              {d.status === "pending" && <span>● 待處理</span>}
+              {d.status === "ready" && <span className="text-[var(--accent)]">{t("brand.doc.ready")}</span>}
+              {d.status === "processing" && <span className="text-yellow-400">{t("brand.doc.processing")}</span>}
+              {d.status === "error" && <span className="text-red-400">{t("brand.doc.error")}</span>}
+              {d.status === "pending" && <span>{t("brand.doc.pending")}</span>}
               <span> · {formatSize(d.byte_size)}</span>
             </div>
             {d.error_message && <div className="mt-1 text-red-400 break-words">{d.error_message}</div>}
@@ -48,7 +50,7 @@ export function DocumentList({ brandId, documents }: { brandId: string; document
             onClick={() => startTransition(() => deleteDocument(d.id, brandId))}
             disabled={pending}
             className="shrink-0 text-[var(--muted)] hover:text-red-400 disabled:opacity-50"
-            aria-label="刪除"
+            aria-label="✕"
           >
             ✕
           </button>

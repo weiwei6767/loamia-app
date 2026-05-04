@@ -2,8 +2,10 @@
 
 import { useActionState, useRef, useEffect } from "react";
 import { uploadDocument, type UploadState } from "./actions";
+import { useI18n } from "@/lib/i18n/provider";
 
 export function Uploader({ brandId }: { brandId: string }) {
+  const { t } = useI18n();
   const [state, action, pending] = useActionState<UploadState, FormData>(uploadDocument, undefined);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -27,11 +29,11 @@ export function Uploader({ brandId }: { brandId: string }) {
         disabled={pending}
         className="w-full bg-[var(--accent)] py-2 text-xs font-bold tracking-wide text-[var(--background)] transition hover:bg-[var(--accent-glow)] disabled:opacity-50"
       >
-        {pending ? "處理中..." : "上傳並處理"}
+        {pending ? t("brand.upload.processing") : t("brand.upload.button")}
       </button>
       {state?.error && <p className="text-xs text-red-400">{state.error}</p>}
       {state?.success && <p className="text-xs text-[var(--accent)]">{state.success}</p>}
-      <p className="text-xs text-[var(--muted)]">支援 .txt / .md / .pdf / .docx，10MB 內</p>
+      <p className="text-xs text-[var(--muted)]">{t("brand.upload.help")}</p>
     </form>
   );
 }

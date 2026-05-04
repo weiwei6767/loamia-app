@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { CitationModal } from "./citation-modal";
+import { useI18n } from "@/lib/i18n/provider";
 
 export type Citation = {
   id: string;
@@ -47,6 +48,7 @@ export function Chat({
   initialMessages: StoredMessage[];
 }) {
   const router = useRouter();
+  const { t } = useI18n();
   const [messages, setMessages] = useState<Message[]>(() =>
     initialMessages
       .filter((m) => m.role === "user" || m.role === "assistant")
@@ -153,7 +155,7 @@ export function Chat({
         router.refresh();
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "發送失敗");
+      setError(err instanceof Error ? err.message : t("chat.error.send"));
       setMessages((m) => m.slice(0, -1));
     } finally {
       setPending(false);
@@ -166,12 +168,14 @@ export function Chat({
         {messages.length === 0 && (
           <div className="mt-12 text-center text-sm text-[var(--muted)]">
             <div className="font-mono text-xs tracking-widest text-[var(--accent)] mb-3">
-              BRAND GPT
+              {t("chat.title")}
             </div>
             <p>
-              問我任何關於 <span className="text-[var(--foreground)] font-medium">{brandName}</span> 的問題
+              {t("chat.empty.line1.before")}
+              <span className="text-[var(--foreground)] font-medium">{brandName}</span>
+              {t("chat.empty.line1.after")}
             </p>
-            <p className="mt-2 text-xs">（先在文件區上傳幾份相關資料，我才能根據資料回答）</p>
+            <p className="mt-2 text-xs">{t("chat.empty.line2")}</p>
           </div>
         )}
 
@@ -191,7 +195,7 @@ export function Chat({
                 >
                   {showThinking ? (
                     <span className="inline-flex items-center gap-2 text-[var(--muted)]">
-                      <span className="spinner" /> 思考中...
+                      <span className="spinner" /> {t("chat.thinking")}
                     </span>
                   ) : (
                     m.content
@@ -224,7 +228,7 @@ export function Chat({
         <input
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder={`問關於 ${brandName} 的問題...`}
+          placeholder={`${t("chat.placeholder.before")}${brandName}${t("chat.placeholder.after")}`}
           className="flex-1 border border-[var(--line)] bg-[var(--surface-2)] px-4 py-2.5 text-sm focus:border-[var(--accent)] focus:outline-none disabled:opacity-50"
           disabled={pending}
         />
@@ -233,7 +237,7 @@ export function Chat({
           disabled={pending || !input.trim()}
           className="bg-[var(--accent)] px-6 py-2.5 text-sm font-bold tracking-wide text-[var(--background)] transition hover:bg-[var(--accent-glow)] disabled:opacity-50 inline-flex items-center gap-2"
         >
-          {pending ? <span className="spinner" /> : "送出"}
+          {pending ? <span className="spinner" /> : t("chat.send")}
         </button>
       </form>
 

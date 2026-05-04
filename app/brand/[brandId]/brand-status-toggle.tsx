@@ -2,6 +2,7 @@
 
 import { useTransition } from "react";
 import { setBrandStatus } from "./actions";
+import { useI18n } from "@/lib/i18n/provider";
 
 export function BrandStatusToggle({
   brandId,
@@ -10,6 +11,7 @@ export function BrandStatusToggle({
   brandId: string;
   status: "active" | "archived";
 }) {
+  const { t } = useI18n();
   const [pending, startTransition] = useTransition();
   const isActive = status === "active";
 
@@ -27,7 +29,7 @@ export function BrandStatusToggle({
       }`}
     >
       {pending ? <span className="spinner mr-2" /> : null}
-      {isActive ? "● 活躍" : "○ 已封存"}
+      {isActive ? t("brand.status.active") : t("brand.status.archived")}
     </button>
   );
 }

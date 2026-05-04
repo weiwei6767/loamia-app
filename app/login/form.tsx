@@ -2,8 +2,10 @@
 
 import { useActionState, useState } from "react";
 import { login, signup, type AuthState } from "@/app/auth/actions";
+import { useI18n } from "@/lib/i18n/provider";
 
 export function LoginForm() {
+  const { t } = useI18n();
   const [mode, setMode] = useState<"login" | "signup">("login");
   const action = mode === "login" ? login : signup;
   const [state, formAction, pending] = useActionState<AuthState, FormData>(action, undefined);
@@ -18,7 +20,7 @@ export function LoginForm() {
             mode === "login" ? "border-b-2 border-[var(--accent)] text-[var(--accent)]" : "text-[var(--muted)]"
           }`}
         >
-          登入
+          {t("auth.tab.login")}
         </button>
         <button
           type="button"
@@ -27,14 +29,14 @@ export function LoginForm() {
             mode === "signup" ? "border-b-2 border-[var(--accent)] text-[var(--accent)]" : "text-[var(--muted)]"
           }`}
         >
-          註冊
+          {t("auth.tab.signup")}
         </button>
       </div>
 
       <form action={formAction} className="space-y-4">
         <div>
           <label htmlFor="email" className="mb-1.5 block text-xs font-medium tracking-wide text-[var(--muted)]">
-            EMAIL
+            {t("auth.email")}
           </label>
           <input
             id="email"
@@ -48,7 +50,7 @@ export function LoginForm() {
 
         <div>
           <label htmlFor="password" className="mb-1.5 block text-xs font-medium tracking-wide text-[var(--muted)]">
-            PASSWORD
+            {t("auth.password")}
           </label>
           <input
             id="password"
@@ -60,7 +62,7 @@ export function LoginForm() {
             className="w-full border border-[var(--line)] bg-[var(--surface-2)] px-3 py-2.5 text-sm focus:border-[var(--accent)] focus:outline-none"
           />
           {mode === "signup" && (
-            <p className="mt-1 text-xs text-[var(--muted)]">至少 8 字</p>
+            <p className="mt-1 text-xs text-[var(--muted)]">{t("auth.password.hint")}</p>
           )}
         </div>
 
@@ -73,7 +75,7 @@ export function LoginForm() {
           disabled={pending}
           className="w-full bg-[var(--accent)] py-3 text-sm font-bold tracking-wide text-[var(--background)] transition hover:bg-[var(--accent-glow)] disabled:opacity-50"
         >
-          {pending ? "..." : mode === "login" ? "登入" : "註冊"}
+          {pending ? "..." : mode === "login" ? t("auth.submit.login") : t("auth.submit.signup")}
         </button>
       </form>
     </div>

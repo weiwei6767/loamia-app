@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 import type { Citation } from "./chat";
+import { useI18n } from "@/lib/i18n/provider";
 
 export function CitationModal({
   citation,
@@ -10,6 +11,7 @@ export function CitationModal({
   citation: Citation | null;
   onClose: () => void;
 }) {
+  const { t } = useI18n();
   useEffect(() => {
     if (!citation) return;
     const onKey = (e: KeyboardEvent) => {
@@ -32,15 +34,15 @@ export function CitationModal({
       >
         <header className="flex items-start justify-between gap-3 p-5 border-b border-[var(--line)]">
           <div className="min-w-0">
-            <div className="text-xs font-mono tracking-widest text-[var(--accent)] mb-1">SOURCE</div>
+            <div className="text-xs font-mono tracking-widest text-[var(--accent)] mb-1">{t("citation.label")}</div>
             <div className="font-medium truncate">{citation.filename}</div>
             <div className="text-xs text-[var(--muted)] mt-1">
-              相似度 {(citation.similarity * 100).toFixed(1)}%
+              {t("citation.similarity.before")}{(citation.similarity * 100).toFixed(1)}%
             </div>
           </div>
           <button
             onClick={onClose}
-            aria-label="關閉"
+            aria-label={t("citation.close")}
             className="text-[var(--muted)] hover:text-[var(--foreground)] text-xl leading-none px-2"
           >
             ×

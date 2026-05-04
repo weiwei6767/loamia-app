@@ -1,6 +1,10 @@
 import type { Metadata } from "next";
+import { cookies } from "next/headers";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
+import { ThemeProvider } from "@/lib/theme/provider";
+import { I18nProvider } from "@/lib/i18n/provider";
+import { SettingsWidget } from "@/components/SettingsWidget";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -17,10 +21,27 @@ export const metadata: Metadata = {
   description: "AI Marketing OS for advertising agencies and brands",
 };
 
-export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+  const cookieStore = await cookies();
+  const themeCookie = cookieStore.get("loamia.theme")?.value;
+  const localeCookie = cookieStore.get("loamia.locale")?.value;
+  const theme = themeCookie === "light" ? "light" : "dark";
+  const locale = localeCookie === "en" ? "en" : "zh";
+
   return (
-    <html lang="zh-TW" className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}>
-      <body className="min-h-full">{children}</body>
+    <html
+      lang={locale === "zh" ? "zh-TW" : "en"}
+      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased ${theme}`}
+      suppressHydrationWarning
+    >
+      <body className="min-h-full">
+        <ThemeProvider initialTheme={theme}>
+          <I18nProvider initialLocale={locale}>
+            {children}
+            <SettingsWidget />
+          </I18nProvider>
+        </ThemeProvider>
+      </body>
     </html>
   );
 }
