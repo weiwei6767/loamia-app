@@ -87,7 +87,23 @@ export default async function BrandPage({
               <h1 className="text-lg font-bold truncate">{brand.name}</h1>
             </div>
           </div>
-          <BrandStatusToggle brandId={brand.id} status={brand.status as "active" | "archived"} />
+          <div className="flex items-center gap-3">
+            <nav className="flex items-center gap-1 text-xs font-mono">
+              <Link
+                href={`/brand/${brand.id}`}
+                className="px-3 py-1.5 border-b-2 border-[var(--accent)] text-[var(--accent)]"
+              >
+                {t("reports.chat")}
+              </Link>
+              <Link
+                href={`/brand/${brand.id}/reports`}
+                className="px-3 py-1.5 text-[var(--muted)] hover:text-[var(--foreground)]"
+              >
+                {t("reports.nav")}
+              </Link>
+            </nav>
+            <BrandStatusToggle brandId={brand.id} status={brand.status as "active" | "archived"} />
+          </div>
         </div>
       </header>
 

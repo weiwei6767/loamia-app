@@ -95,6 +95,23 @@ create table if not exists chat_messages (
 create index if not exists chat_messages_thread_id_idx on chat_messages(thread_id);
 
 -- =====================================================
+-- 5b. brand_reports — 結案報表 / Auto Report
+-- =====================================================
+create table if not exists brand_reports (
+  id uuid primary key default gen_random_uuid(),
+  brand_id uuid not null references brands(id) on delete cascade,
+  agency_id uuid not null references agencies(id) on delete cascade,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  title text not null,
+  content text not null,
+  citations jsonb,
+  focus text,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists brand_reports_brand_id_idx on brand_reports(brand_id);
+
+-- =====================================================
 -- 6. RLS — 每張表都隔離到所屬 agency
 -- =====================================================
 alter table agencies enable row level security;
@@ -104,6 +121,11 @@ alter table documents enable row level security;
 alter table document_chunks enable row level security;
 alter table chat_threads enable row level security;
 alter table chat_messages enable row level security;
+alter table brand_reports enable row level security;
+
+create policy "brand_reports_all" on brand_reports for all
+  using (agency_id in (select user_agency_ids()))
+  with check (agency_id in (select user_agency_ids()));
 
 -- 「我屬於哪些 agency」的判斷函式（查 agency_members）
 create or replace function user_agency_ids()

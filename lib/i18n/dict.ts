@@ -80,6 +80,23 @@ export const dict = {
   "citation.similarity.before": { zh: "相似度 ", en: "Similarity " },
   "citation.close": { zh: "關閉", en: "Close" },
 
+  // Reports (Auto Report)
+  "reports.nav": { zh: "REPORTS", en: "REPORTS" },
+  "reports.chat": { zh: "CHAT", en: "CHAT" },
+  "reports.title": { zh: "結案報表", en: "Reports" },
+  "reports.subtitle": { zh: "從品牌文件自動生成的結構化月度報表", en: "Structured monthly reports auto-generated from brand documents" },
+  "reports.generate": { zh: "生成報表", en: "Generate Report" },
+  "reports.generating": { zh: "生成中...", en: "Generating..." },
+  "reports.focus.label": { zh: "主題重點（選填）", en: "Focus (optional)" },
+  "reports.focus.placeholder": { zh: "例：雙十一檔期成效、Q1 KOL 合作回顧", en: "e.g. Black Friday performance, Q1 KOL review" },
+  "reports.empty": { zh: "還沒有報表 — 點上方按鈕生一份", en: "No reports yet — click above to generate one" },
+  "reports.delete.confirm": { zh: "確定刪除這份報表？", en: "Delete this report?" },
+  "reports.back": { zh: "← 報表列表", en: "← All reports" },
+  "reports.error.generate": { zh: "生成失敗", en: "Generation failed" },
+  "reports.error.no_docs": { zh: "請先上傳文件再生成報表", en: "Upload documents first before generating a report" },
+  "reports.citation.label": { zh: "引用來源", en: "Sources" },
+  "reports.created": { zh: "建立於", en: "Generated" },
+
   // Settings
   "settings.label": { zh: "設定", en: "Settings" },
   "settings.theme": { zh: "主題", en: "Theme" },
