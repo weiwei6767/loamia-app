@@ -8,8 +8,11 @@ import {
   deleteTemplate,
   saveSectionPreset,
   deleteSectionPreset,
+  analyzeReferenceStyle,
+  deleteCustomStyle,
   type GenerateState,
   type SaveTemplateState,
+  type CustomStyleState,
 } from "./actions";
 import { useI18n } from "@/lib/i18n/provider";
 import { Uploader } from "../uploader";
@@ -50,14 +53,22 @@ export type SectionPreset = {
   sections: string[];
 };
 
+export type CustomStyleRow = {
+  id: string;
+  name: string;
+  analysis: string;
+};
+
 export function GenerateForm({
   brandId,
   templates,
   sectionPresets,
+  customStyles,
 }: {
   brandId: string;
   templates: SavedTemplate[];
   sectionPresets: SectionPreset[];
+  customStyles: CustomStyleRow[];
 }) {
   const { t, locale } = useI18n();
   const [state, action, pending] = useActionState<GenerateState, FormData>(generateReport, undefined);
@@ -70,6 +81,8 @@ export function GenerateForm({
   const [length, setLength] = useState("standard");
   const [lang, setLang] = useState<"zh" | "en">(locale);
   const [style, setStyle] = useState<StyleKey | "">("");
+  const [customStyleId, setCustomStyleId] = useState("");
+  const [period, setPeriod] = useState("");
   const [showSave, setShowSave] = useState(false);
   const [presetName, setPresetName] = useState("");
   const [presetMsg, setPresetMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
@@ -314,18 +327,40 @@ export function GenerateForm({
         </div>
       </div>
 
+      {/* Period filter */}
+      <div>
+        <label htmlFor="period" className="mb-1.5 block text-xs font-medium tracking-wide text-[var(--muted)]">
+          {t("reports.period.label")}
+        </label>
+        <input
+          id="period"
+          name="period"
+          type="text"
+          value={period}
+          onChange={(e) => setPeriod(e.target.value)}
+          maxLength={20}
+          placeholder={t("reports.period.placeholder")}
+          className="w-full sm:w-48 border border-[var(--line)] bg-[var(--surface-2)] px-3 py-2 text-sm focus:border-[var(--accent)] focus:outline-none"
+        />
+        <p className="mt-1 text-xs text-[var(--muted)]">{t("reports.period.hint")}</p>
+      </div>
+
       {/* Style picker */}
       <div>
         <label className="mb-2 block text-xs font-medium tracking-wide text-[var(--muted)]">
           {t("reports.style.label")}
         </label>
         <input type="hidden" name="style" value={style} />
+        <input type="hidden" name="customStyleId" value={customStyleId} />
         <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2">
           <button
             type="button"
-            onClick={() => setStyle("")}
+            onClick={() => {
+              setStyle("");
+              setCustomStyleId("");
+            }}
             className={`relative aspect-[8/5] border text-xs flex items-center justify-center transition ${
-              style === ""
+              style === "" && !customStyleId
                 ? "border-[var(--accent)] ring-2 ring-[var(--accent)]/30"
                 : "border-[var(--line)] hover:border-[var(--accent)]/50"
             } bg-[var(--surface-2)]`}
@@ -334,12 +369,15 @@ export function GenerateForm({
           </button>
           {STYLE_KEYS.map((k) => {
             const s = STYLES[k];
-            const active = style === k;
+            const active = style === k && !customStyleId;
             return (
               <button
                 key={k}
                 type="button"
-                onClick={() => setStyle(k)}
+                onClick={() => {
+                  setStyle(k);
+                  setCustomStyleId("");
+                }}
                 className={`relative aspect-[8/5] border overflow-hidden transition ${
                   active
                     ? "border-[var(--accent)] ring-2 ring-[var(--accent)]/30"
@@ -355,6 +393,21 @@ export function GenerateForm({
                   {t(`reports.style.${k}` as never)}
                 </span>
               </button>
+            );
+          })}
+          {customStyles.map((cs) => {
+            const active = customStyleId === cs.id;
+            return (
+              <CustomStyleButton
+                key={cs.id}
+                style={cs}
+                brandId={brandId}
+                active={active}
+                onSelect={() => {
+                  setCustomStyleId(cs.id);
+                  setStyle("");
+                }}
+              />
             );
           })}
         </div>
@@ -401,6 +454,125 @@ export function GenerateForm({
         onDone={() => setShowSave(false)}
       />
     )}
+
+    <VisionUpload brandId={brandId} />
+    </div>
+  );
+}
+
+function CustomStyleButton({
+  style,
+  brandId,
+  active,
+  onSelect,
+}: {
+  style: CustomStyleRow;
+  brandId: string;
+  active: boolean;
+  onSelect: () => void;
+}) {
+  const { t } = useI18n();
+  const [pending, startTransition] = useTransition();
+  return (
+    <div
+      className={`relative aspect-[8/5] border overflow-hidden transition ${
+        active
+          ? "border-[var(--accent)] ring-2 ring-[var(--accent)]/30"
+          : "border-[var(--line)] hover:border-[var(--accent)]/50"
+      } bg-[var(--surface-2)]`}
+    >
+      <button
+        type="button"
+        onClick={onSelect}
+        className="block w-full h-full text-xs px-2 flex items-center justify-center"
+        title={style.analysis.slice(0, 200)}
+      >
+        <span className="text-[var(--accent)] font-medium truncate">{style.name}</span>
+      </button>
+      <button
+        type="button"
+        disabled={pending}
+        onClick={(e) => {
+          e.stopPropagation();
+          if (!confirm(t("reports.vision.delete.confirm"))) return;
+          startTransition(() => deleteCustomStyle(style.id, brandId));
+        }}
+        className="absolute top-0.5 right-0.5 w-5 h-5 text-[10px] text-[var(--muted)] hover:text-red-400 disabled:opacity-50"
+        aria-label="delete"
+      >
+        ✕
+      </button>
+    </div>
+  );
+}
+
+function VisionUpload({ brandId }: { brandId: string }) {
+  const { t } = useI18n();
+  const router = useRouter();
+  const [state, action, pending] = useActionState<CustomStyleState, FormData>(
+    analyzeReferenceStyle,
+    undefined
+  );
+  const [name, setName] = useState("");
+
+  useEffect(() => {
+    if (state && "success" in state && state.success) {
+      router.refresh();
+      setName("");
+    }
+  }, [state, router]);
+
+  return (
+    <div className="border border-dashed border-[var(--accent)]/40 bg-[var(--surface)] p-4 space-y-3">
+      <div className="flex items-center gap-2 text-xs font-mono tracking-widest text-[var(--accent)]">
+        <span>📷</span>
+        <span>{t("reports.vision.section")}</span>
+      </div>
+      <p className="text-xs text-[var(--muted)]">{t("reports.vision.help")}</p>
+      <form action={action} className="space-y-2">
+        <input type="hidden" name="brandId" value={brandId} />
+        <input
+          name="refImage"
+          type="file"
+          accept="image/png,image/jpeg,image/webp,image/gif"
+          required
+          className="block w-full text-xs text-[var(--muted)] file:mr-3 file:border-0 file:bg-[var(--surface-2)] file:px-3 file:py-1.5 file:text-xs file:text-[var(--foreground)] hover:file:bg-[var(--accent)] hover:file:text-[var(--background)]"
+        />
+        <div className="flex gap-2">
+          <input
+            name="styleName"
+            type="text"
+            required
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            maxLength={60}
+            placeholder={t("reports.vision.name.placeholder")}
+            className="flex-1 text-xs px-2 py-1.5 border border-[var(--line)] bg-[var(--surface-2)] focus:border-[var(--accent)] focus:outline-none"
+          />
+          <button
+            type="submit"
+            disabled={pending}
+            className="text-xs px-3 py-1.5 bg-[var(--accent)] text-[var(--background)] font-bold hover:bg-[var(--accent-glow)] disabled:opacity-50 inline-flex items-center gap-1.5"
+          >
+            {pending ? (
+              <>
+                <span className="spinner" />
+                {t("reports.vision.analyzing")}
+              </>
+            ) : (
+              t("reports.vision.upload")
+            )}
+          </button>
+        </div>
+        {state && "error" in state && state.error && (
+          <p className="text-xs text-red-400">{state.error}</p>
+        )}
+        {state && "success" in state && state.success && (
+          <p className="text-xs text-[var(--accent)]">
+            ✓ {t("reports.vision.success")}：{state.success}
+          </p>
+        )}
+      </form>
     </div>
   );
 }
@@ -608,6 +780,8 @@ function Picker({
         <input type="hidden" name="length" value={state.length} />
         <input type="hidden" name="lang" value={state.lang} />
         <input type="hidden" name="style" value={state.style} />
+        <input type="hidden" name="customStyleId" value={state.customStyleId ?? ""} />
+        <input type="hidden" name="period" value={state.period ?? ""} />
 
         <div>
           <div className="text-xs font-medium tracking-wide text-[var(--muted)] mb-2">

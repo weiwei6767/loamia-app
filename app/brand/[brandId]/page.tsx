@@ -49,7 +49,7 @@ export default async function BrandPage({
   const [{ data: documents }, { data: threads }] = await Promise.all([
     supabase
       .from("documents")
-      .select("id, filename, status, byte_size, created_at, error_message")
+      .select("id, filename, status, byte_size, created_at, error_message, tags, period")
       .eq("brand_id", brand.id)
       .order("created_at", { ascending: false }),
     supabase

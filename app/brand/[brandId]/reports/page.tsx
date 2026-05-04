@@ -21,21 +21,26 @@ export default async function ReportsPage({
     .single();
   if (!brand) notFound();
 
-  const [{ data: reports }, { data: templates }, { data: sectionPresets }] = await Promise.all([
-    supabase
-      .from("brand_reports")
-      .select("id, title, focus, created_at")
-      .eq("brand_id", brand.id)
-      .order("created_at", { ascending: false }),
-    supabase
-      .from("report_templates")
-      .select("id, name, sections, tone, length, lang, style")
-      .order("created_at", { ascending: false }),
-    supabase
-      .from("section_presets")
-      .select("id, name, sections")
-      .order("created_at", { ascending: false }),
-  ]);
+  const [{ data: reports }, { data: templates }, { data: sectionPresets }, { data: customStyles }] =
+    await Promise.all([
+      supabase
+        .from("brand_reports")
+        .select("id, title, focus, created_at")
+        .eq("brand_id", brand.id)
+        .order("created_at", { ascending: false }),
+      supabase
+        .from("report_templates")
+        .select("id, name, sections, tone, length, lang, style")
+        .order("created_at", { ascending: false }),
+      supabase
+        .from("section_presets")
+        .select("id, name, sections")
+        .order("created_at", { ascending: false }),
+      supabase
+        .from("custom_styles")
+        .select("id, name, analysis, created_at")
+        .order("created_at", { ascending: false }),
+    ]);
 
   const t = await getServerT();
 
@@ -87,6 +92,7 @@ export default async function ReportsPage({
           brandId={brand.id}
           templates={templates ?? []}
           sectionPresets={sectionPresets ?? []}
+          customStyles={customStyles ?? []}
         />
 
         <div className="mt-10">

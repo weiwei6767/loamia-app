@@ -11,6 +11,8 @@ type Doc = {
   byte_size: number | null;
   created_at: string;
   error_message: string | null;
+  tags?: string[] | null;
+  period?: string | null;
 };
 
 function formatSize(bytes: number | null) {
@@ -43,7 +45,20 @@ export function DocumentList({ brandId, documents }: { brandId: string; document
               {d.status === "error" && <span className="text-red-400">{t("brand.doc.error")}</span>}
               {d.status === "pending" && <span>{t("brand.doc.pending")}</span>}
               <span> · {formatSize(d.byte_size)}</span>
+              {d.period && <span> · {d.period}</span>}
             </div>
+            {d.tags && d.tags.length > 0 && (
+              <div className="mt-1.5 flex flex-wrap gap-1">
+                {d.tags.map((tag, i) => (
+                  <span
+                    key={i}
+                    className="text-[10px] px-1.5 py-0.5 border border-[var(--line)] text-[var(--muted)]"
+                  >
+                    {tag}
+                  </span>
+                ))}
+              </div>
+            )}
             {d.error_message && <div className="mt-1 text-red-400 break-words">{d.error_message}</div>}
           </div>
           <button

@@ -50,6 +50,10 @@ create table if not exists documents (
 );
 
 create index if not exists documents_brand_id_idx on documents(brand_id);
+create index if not exists documents_period_idx on documents(period);
+
+alter table documents add column if not exists tags jsonb default '[]'::jsonb;
+alter table documents add column if not exists period text;
 
 -- =====================================================
 -- 4. document_chunks — 切片 + 向量
@@ -112,6 +116,21 @@ create table if not exists brand_reports (
 create index if not exists brand_reports_brand_id_idx on brand_reports(brand_id);
 
 -- =====================================================
+-- 5e. custom_styles — Claude Vision 分析的自訂風格
+-- =====================================================
+create table if not exists custom_styles (
+  id uuid primary key default gen_random_uuid(),
+  agency_id uuid not null references agencies(id) on delete cascade,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  name text not null,
+  analysis text not null,
+  preview_path text,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists custom_styles_agency_idx on custom_styles(agency_id);
+
+-- =====================================================
 -- 5d. section_presets — 段落快速模板（只儲存段落，不含風格/語氣）
 -- =====================================================
 create table if not exists section_presets (
@@ -168,6 +187,11 @@ create policy "report_templates_all" on report_templates for all
 
 alter table section_presets enable row level security;
 create policy "section_presets_all" on section_presets for all
+  using (agency_id in (select user_agency_ids()))
+  with check (agency_id in (select user_agency_ids()));
+
+alter table custom_styles enable row level security;
+create policy "custom_styles_all" on custom_styles for all
   using (agency_id in (select user_agency_ids()))
   with check (agency_id in (select user_agency_ids()));
 

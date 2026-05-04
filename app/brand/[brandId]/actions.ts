@@ -13,6 +13,12 @@ export async function uploadDocument(
 ): Promise<UploadState> {
   const file = formData.get("file") as File | null;
   const brandId = String(formData.get("brandId") ?? "");
+  const tagsRaw = String(formData.get("tags") ?? "").trim();
+  const period = String(formData.get("period") ?? "").trim();
+  const tags = tagsRaw
+    ? tagsRaw.split(/[,，;；]/).map((t) => t.trim()).filter(Boolean).slice(0, 8)
+    : [];
+
   if (!file || file.size === 0) return { error: "請選擇檔案" };
   if (!brandId) return { error: "缺少 brandId" };
   if (file.size > 50 * 1024 * 1024) return { error: "檔案不能超過 50MB" };
@@ -48,6 +54,8 @@ export async function uploadDocument(
       mime_type: file.type,
       byte_size: file.size,
       status: "processing",
+      tags,
+      period: period || null,
     })
     .select()
     .single();

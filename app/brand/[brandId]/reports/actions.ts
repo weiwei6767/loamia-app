@@ -16,6 +16,7 @@ import {
   type ReportOptions,
 } from "@/lib/ai/report";
 import { isValidStyle, type StyleKey } from "@/lib/ai/styles";
+import { analyzeStyleFromImage } from "@/lib/ai/vision";
 
 export type GenerateState =
   | undefined
@@ -28,7 +29,9 @@ export type GenerateState =
       length: Length;
       lang: Lang;
       style: StyleKey | "";
-      documents: { id: string; filename: string }[];
+      customStyleId: string;
+      period: string;
+      documents: { id: string; filename: string; tags: string[] | null; period: string | null }[];
     };
 
 const TONES: Tone[] = ["professional", "business", "client", "internal", "casual", "data"];
@@ -65,6 +68,8 @@ export async function generateReport(
 ): Promise<GenerateState> {
   const brandId = String(formData.get("brandId") ?? "");
   const selectedDocIds = formData.getAll("docId").map(String).filter(Boolean);
+  const period = String(formData.get("period") ?? "").trim();
+  const customStyleId = String(formData.get("customStyleId") ?? "").trim();
   if (!brandId) return { error: "missing brandId" };
 
   const opts = parseOptions(formData);
@@ -80,14 +85,29 @@ export async function generateReport(
     .single();
   if (!brand) return { error: "品牌不存在或無權限" };
 
+  // Apply custom style analysis if specified
+  if (customStyleId) {
+    const { data: customStyle } = await supabase
+      .from("custom_styles")
+      .select("analysis")
+      .eq("id", customStyleId)
+      .single();
+    if (customStyle?.analysis) opts.customStyleAnalysis = customStyle.analysis;
+  }
+
   let chunks;
   try {
     if (selectedDocIds.length > 0) {
       chunks = await fetchChunksByDocs(brand.id, selectedDocIds);
       if (chunks.length === 0) return { error: "選的文件中沒有可用內容" };
-    } else {
-      chunks = await retrieveRelevantChunks(brand.id, opts.focus, opts.lang, 50);
-      if (!isRelevant(chunks)) {
+    } else if (period) {
+      // Period filter: get all chunks from documents matching this period
+      const { data: matchingDocs } = await supabase
+        .from("documents")
+        .select("id")
+        .eq("brand_id", brand.id)
+        .eq("period", period);
+      if (!matchingDocs || matchingDocs.length === 0) {
         const documents = await listBrandDocuments(brand.id);
         if (documents.length === 0) return { error: "no_documents" };
         return {
@@ -98,7 +118,46 @@ export async function generateReport(
           length: opts.length,
           lang: opts.lang,
           style: opts.style ?? "",
-          documents: documents.map((d) => ({ id: d.id, filename: d.filename })),
+          customStyleId,
+          period,
+          documents: documents.map((d) => ({
+            id: d.id,
+            filename: d.filename,
+            tags: null,
+            period: null,
+          })),
+        };
+      }
+      chunks = await fetchChunksByDocs(
+        brand.id,
+        matchingDocs.map((d) => d.id as string)
+      );
+    } else {
+      chunks = await retrieveRelevantChunks(brand.id, opts.focus, opts.lang, 50);
+      if (!isRelevant(chunks)) {
+        const { data: docs } = await supabase
+          .from("documents")
+          .select("id, filename, tags, period")
+          .eq("brand_id", brand.id)
+          .eq("status", "ready")
+          .order("created_at", { ascending: false });
+        if (!docs || docs.length === 0) return { error: "no_documents" };
+        return {
+          needsSelection: true,
+          focus: opts.focus,
+          sections: opts.sections.join("\n"),
+          tone: opts.tone,
+          length: opts.length,
+          lang: opts.lang,
+          style: opts.style ?? "",
+          customStyleId,
+          period,
+          documents: docs.map((d) => ({
+            id: d.id as string,
+            filename: d.filename as string,
+            tags: (d.tags as string[] | null) ?? null,
+            period: (d.period as string | null) ?? null,
+          })),
         };
       }
     }
@@ -254,5 +313,86 @@ export async function saveSectionPreset(
 export async function deleteSectionPreset(presetId: string, brandId: string) {
   const supabase = await createClient();
   await supabase.from("section_presets").delete().eq("id", presetId);
+  revalidatePath(`/brand/${brandId}/reports`);
+}
+
+// ─── Custom styles (Vision-analyzed reference reports) ─────
+
+export type CustomStyleState =
+  | undefined
+  | { error: string }
+  | { success: string; styleId: string };
+
+export async function analyzeReferenceStyle(
+  _state: CustomStyleState,
+  formData: FormData
+): Promise<CustomStyleState> {
+  const file = formData.get("refImage") as File | null;
+  const name = String(formData.get("styleName") ?? "").trim();
+  const brandId = String(formData.get("brandId") ?? "");
+
+  if (!file || file.size === 0) return { error: "請選擇圖片" };
+  if (!name) return { error: "請輸入風格名稱" };
+  if (file.size > 8 * 1024 * 1024) return { error: "圖片不能超過 8MB" };
+  if (!file.type.startsWith("image/")) return { error: "請上傳圖片檔" };
+
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "未登入" };
+
+  const { data: memberships } = await supabase
+    .from("agency_members")
+    .select("agency_id")
+    .limit(1);
+  const agencyId = memberships?.[0]?.agency_id;
+  if (!agencyId) return { error: "no agency" };
+
+  const buffer = Buffer.from(await file.arrayBuffer());
+
+  // Optionally upload preview to storage
+  const ext = file.name.includes(".") ? file.name.slice(file.name.lastIndexOf(".")) : ".png";
+  const safeExt = ext.replace(/[^a-zA-Z0-9.]/g, "");
+  const previewPath = `${agencyId}/styles/${Date.now()}-${crypto.randomUUID()}${safeExt}`;
+  await supabase.storage
+    .from("documents")
+    .upload(previewPath, buffer, { contentType: file.type, upsert: false })
+    .catch(() => null);
+
+  let analysis: string;
+  try {
+    const result = await analyzeStyleFromImage(buffer, file.type);
+    analysis = result.analysis;
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Vision 分析失敗" };
+  }
+
+  const { data: style, error: insertErr } = await supabase
+    .from("custom_styles")
+    .insert({
+      agency_id: agencyId,
+      user_id: user.id,
+      name: name.slice(0, 60),
+      analysis,
+      preview_path: previewPath,
+    })
+    .select("id")
+    .single();
+  if (insertErr || !style) return { error: insertErr?.message ?? "儲存失敗" };
+
+  if (brandId) revalidatePath(`/brand/${brandId}/reports`);
+  return { success: name, styleId: style.id };
+}
+
+export async function deleteCustomStyle(styleId: string, brandId: string) {
+  const supabase = await createClient();
+  const { data: style } = await supabase
+    .from("custom_styles")
+    .select("preview_path")
+    .eq("id", styleId)
+    .single();
+  if (style?.preview_path) {
+    await supabase.storage.from("documents").remove([style.preview_path]);
+  }
+  await supabase.from("custom_styles").delete().eq("id", styleId);
   revalidatePath(`/brand/${brandId}/reports`);
 }
