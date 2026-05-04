@@ -1,11 +1,13 @@
 "use server";
 
-import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { generateMonitorReplies } from "@/lib/ai/creative";
 
-export type MonitorState = { error?: string } | undefined;
+export type MonitorState =
+  | undefined
+  | { error: string }
+  | { success: true; replyId: string };
 
 export async function generateReplies(
   _state: MonitorState,
@@ -38,19 +40,23 @@ export async function generateReplies(
     return { error: err instanceof Error ? err.message : "生成失敗" };
   }
 
-  const { error: insertErr } = await supabase.from("monitor_replies").insert({
-    brand_id: brand.id,
-    agency_id: brand.agency_id,
-    user_id: user.id,
-    source_text: sourceText,
-    source_type: sourceType || null,
-    tone: tone || null,
-    suggestions,
-  });
-  if (insertErr) return { error: insertErr.message };
+  const { data: row, error: insertErr } = await supabase
+    .from("monitor_replies")
+    .insert({
+      brand_id: brand.id,
+      agency_id: brand.agency_id,
+      user_id: user.id,
+      source_text: sourceText,
+      source_type: sourceType || null,
+      tone: tone || null,
+      suggestions,
+    })
+    .select("id")
+    .single();
+  if (insertErr || !row) return { error: insertErr?.message ?? "儲存失敗" };
 
   revalidatePath(`/brand/${brandId}/monitor`);
-  redirect(`/brand/${brandId}/monitor`);
+  return { success: true, replyId: row.id as string };
 }
 
 export async function deleteMonitorReply(replyId: string, brandId: string) {

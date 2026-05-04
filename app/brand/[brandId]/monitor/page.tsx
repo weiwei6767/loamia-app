@@ -3,18 +3,18 @@ import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getServerT } from "@/lib/i18n/server";
 import { BrandStatusToggle } from "../brand-status-toggle";
-import { DataView } from "./data-view";
+import { MonitorView } from "./monitor-view";
 
-type Doc = {
+type MonitorRow = {
   id: string;
-  filename: string;
-  status: string;
-  byte_size: number | null;
+  source_text: string;
+  source_type: string | null;
+  tone: string | null;
+  suggestions: string[];
   created_at: string;
-  error_message: string | null;
 };
 
-export default async function DataPage({
+export default async function MonitorPage({
   params,
 }: {
   params: Promise<{ brandId: string }>;
@@ -31,14 +31,21 @@ export default async function DataPage({
     .single();
   if (!brand) notFound();
 
-  const { data: documents } = await supabase
-    .from("documents")
-    .select("id, filename, status, byte_size, created_at, error_message")
+  const { data: rows } = await supabase
+    .from("monitor_replies")
+    .select("id, source_text, source_type, tone, suggestions, created_at")
     .eq("brand_id", brand.id)
     .order("created_at", { ascending: false });
 
   const t = await getServerT();
-  const docs: Doc[] = (documents ?? []) as Doc[];
+  const history: MonitorRow[] = (rows ?? []).map((r) => ({
+    id: r.id as string,
+    source_text: r.source_text as string,
+    source_type: (r.source_type as string | null) ?? null,
+    tone: (r.tone as string | null) ?? null,
+    suggestions: (r.suggestions as string[] | null) ?? [],
+    created_at: r.created_at as string,
+  }));
 
   return (
     <main className="min-h-screen flex flex-col">
@@ -68,7 +75,7 @@ export default async function DataPage({
               </Link>
               <Link
                 href={`/brand/${brand.id}/data`}
-                className="px-3 py-1.5 border-b-2 border-[var(--accent)] text-[var(--accent)]"
+                className="px-3 py-1.5 text-[var(--muted)] hover:text-[var(--foreground)]"
               >
                 {t("data.nav")}
               </Link>
@@ -80,7 +87,7 @@ export default async function DataPage({
               </Link>
               <Link
                 href={`/brand/${brand.id}/monitor`}
-                className="px-3 py-1.5 text-[var(--muted)] hover:text-[var(--foreground)]"
+                className="px-3 py-1.5 border-b-2 border-[var(--accent)] text-[var(--accent)]"
               >
                 {t("monitor.nav")}
               </Link>
@@ -99,16 +106,16 @@ export default async function DataPage({
         </div>
       </header>
 
-      <section className="mx-auto max-w-5xl w-full px-4 md:px-6 py-10">
-        <div className="mb-8">
+      <section className="mx-auto max-w-5xl w-full px-4 md:px-6 py-10 space-y-8">
+        <div>
           <div className="font-mono text-xs tracking-widest text-[var(--accent)]">
-            {t("data.nav")} · {brand.name.toUpperCase()}
+            {t("monitor.nav")} · {brand.name.toUpperCase()}
           </div>
-          <h2 className="mt-2 text-2xl md:text-3xl font-bold">{t("data.title")}</h2>
-          <p className="mt-2 text-sm text-[var(--muted)]">{t("data.subtitle")}</p>
+          <h2 className="mt-2 text-2xl md:text-3xl font-bold">{t("monitor.title")}</h2>
+          <p className="mt-2 text-sm text-[var(--muted)]">{t("monitor.subtitle")}</p>
         </div>
 
-        <DataView brandId={brand.id} documents={docs} />
+        <MonitorView brandId={brand.id} history={history} />
       </section>
     </main>
   );

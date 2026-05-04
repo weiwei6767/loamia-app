@@ -86,6 +86,12 @@ export default async function ContentPage({
                 {t("content.nav")}
               </Link>
               <Link
+                href={`/brand/${brand.id}/monitor`}
+                className="px-3 py-1.5 text-[var(--muted)] hover:text-[var(--foreground)]"
+              >
+                {t("monitor.nav")}
+              </Link>
+              <Link
                 href={`/brand/${brand.id}/reports`}
                 className="px-3 py-1.5 text-[var(--muted)] hover:text-[var(--foreground)]"
               >
