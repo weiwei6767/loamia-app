@@ -168,6 +168,50 @@ async function getContainerStatus(
   return json.status ?? "UNKNOWN";
 }
 
+export async function createPost(
+  userId: string,
+  token: string,
+  text: string
+): Promise<{ id: string }> {
+  const createParams = new URLSearchParams({
+    media_type: "TEXT",
+    text,
+    access_token: token,
+  });
+  const createRes = await fetch(
+    `${GRAPH_BASE}/v1.0/${userId}/threads?${createParams.toString()}`,
+    { method: "POST" }
+  );
+  if (!createRes.ok) {
+    const err = await createRes.text();
+    throw new Error(`create container failed: ${createRes.status} ${err}`);
+  }
+  const { id: creationId } = (await createRes.json()) as { id: string };
+
+  for (let i = 0; i < 10; i++) {
+    await new Promise((r) => setTimeout(r, 2000));
+    const status = await getContainerStatus(creationId, token);
+    if (status === "FINISHED") break;
+    if (status === "ERROR" || status === "EXPIRED") {
+      throw new Error(`container status ${status}`);
+    }
+  }
+
+  const publishParams = new URLSearchParams({
+    creation_id: creationId,
+    access_token: token,
+  });
+  const publishRes = await fetch(
+    `${GRAPH_BASE}/v1.0/${userId}/threads_publish?${publishParams.toString()}`,
+    { method: "POST" }
+  );
+  if (!publishRes.ok) {
+    const err = await publishRes.text();
+    throw new Error(`publish failed: ${publishRes.status} ${err}`);
+  }
+  return publishRes.json();
+}
+
 export async function createReply(
   userId: string,
   token: string,

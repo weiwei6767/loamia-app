@@ -98,6 +98,12 @@ export default async function ContentPage({
                 {t("monitor.nav")}
               </Link>
               <Link
+                href={`/brand/${brand.id}/schedule`}
+                className="px-3 py-1.5 text-[var(--muted)] hover:text-[var(--foreground)]"
+              >
+                SCHEDULE
+              </Link>
+              <Link
                 href={`/brand/${brand.id}/reports`}
                 className="px-3 py-1.5 text-[var(--muted)] hover:text-[var(--foreground)]"
               >

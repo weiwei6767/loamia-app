@@ -3,9 +3,9 @@ import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getServerT } from "@/lib/i18n/server";
 import { BrandStatusToggle } from "../brand-status-toggle";
-import { BrainView } from "./brain-view";
+import { ScheduleView } from "./schedule-view";
 
-export default async function BrainPage({
+export default async function SchedulePage({
   params,
 }: {
   params: Promise<{ brandId: string }>;
@@ -17,24 +17,33 @@ export default async function BrainPage({
 
   const { data: brand } = await supabase
     .from("brands")
-    .select("id, name, status, positioning, target_audience, tone_guide, taboo_words")
+    .select("id, name, status")
     .eq("id", brandId)
     .single();
   if (!brand) notFound();
 
-  const [{ data: intelligence }, { data: winning }] = await Promise.all([
+  const [
+    { data: posts },
+    { data: templates },
+    { data: connection },
+  ] = await Promise.all([
     supabase
-      .from("brand_intelligence")
-      .select("id, category, title, content, source, created_at")
+      .from("scheduled_posts")
+      .select("id, text, scheduled_at, status, sent_at, sent_post_id, error_message, template_id, created_at")
+      .eq("brand_id", brand.id)
+      .order("scheduled_at", { ascending: false })
+      .limit(100),
+    supabase
+      .from("post_templates")
+      .select("id, name, prompt, recurrence, weekday, time_of_day, next_run_at, active, created_at")
       .eq("brand_id", brand.id)
       .order("created_at", { ascending: false }),
     supabase
-      .from("winning_patterns")
-      .select("id, pattern_type, example_text, context_summary, outcome_score, created_at")
+      .from("social_connections")
+      .select("username")
       .eq("brand_id", brand.id)
-      .order("outcome_score", { ascending: false, nullsFirst: false })
-      .order("created_at", { ascending: false })
-      .limit(20),
+      .eq("platform", "threads")
+      .maybeSingle(),
   ]);
 
   const t = await getServerT();
@@ -62,7 +71,7 @@ export default async function BrainPage({
               <Link href={`/brand/${brand.id}`} className="px-3 py-1.5 text-[var(--muted)] hover:text-[var(--foreground)]">
                 {t("reports.chat")}
               </Link>
-              <Link href={`/brand/${brand.id}/brain`} className="px-3 py-1.5 border-b-2 border-[var(--accent)] text-[var(--accent)]">
+              <Link href={`/brand/${brand.id}/brain`} className="px-3 py-1.5 text-[var(--muted)] hover:text-[var(--foreground)]">
                 BRAIN
               </Link>
               <Link href={`/brand/${brand.id}/data`} className="px-3 py-1.5 text-[var(--muted)] hover:text-[var(--foreground)]">
@@ -74,7 +83,10 @@ export default async function BrainPage({
               <Link href={`/brand/${brand.id}/monitor`} className="px-3 py-1.5 text-[var(--muted)] hover:text-[var(--foreground)]">
                 {t("monitor.nav")}
               </Link>
-              <Link href={`/brand/${brand.id}/schedule`} className="px-3 py-1.5 text-[var(--muted)] hover:text-[var(--foreground)]">
+              <Link
+                href={`/brand/${brand.id}/schedule`}
+                className="px-3 py-1.5 border-b-2 border-[var(--accent)] text-[var(--accent)]"
+              >
                 SCHEDULE
               </Link>
               <Link href={`/brand/${brand.id}/reports`} className="px-3 py-1.5 text-[var(--muted)] hover:text-[var(--foreground)]">
@@ -92,38 +104,36 @@ export default async function BrainPage({
       <section className="mx-auto max-w-5xl w-full px-4 md:px-6 py-10 space-y-8">
         <div>
           <div className="font-mono text-xs tracking-widest text-[var(--accent)]">
-            BRAND BRAIN · {(brand.name as string).toUpperCase()}
+            SCHEDULE · {(brand.name as string).toUpperCase()}
           </div>
-          <h2 className="mt-2 text-2xl md:text-3xl font-bold">品牌大腦</h2>
+          <h2 className="mt-2 text-2xl md:text-3xl font-bold">排程發文</h2>
           <p className="mt-2 text-sm text-[var(--muted)]">
-            三層記憶——Identity 我是誰、Market Intelligence 外部世界、Winning Memory 什麼有效。每次 AI 生成都會自動參考。
+            預約一次或多次 Threads 貼文，或設定模板讓 AI 依品牌語氣每日／每週自動產出貼文。
           </p>
         </div>
 
-        <BrainView
+        <ScheduleView
           brandId={brand.id}
-          identity={{
-            name: brand.name as string,
-            positioning: (brand.positioning as string | null) ?? "",
-            target_audience: (brand.target_audience as string | null) ?? "",
-            tone_guide: (brand.tone_guide as string | null) ?? "",
-            taboo_words: (brand.taboo_words as string[] | null) ?? [],
-          }}
-          intelligence={(intelligence ?? []).map((i) => ({
-            id: i.id as string,
-            category: i.category as string,
-            title: i.title as string,
-            content: i.content as string,
-            source: (i.source as string | null) ?? null,
-            created_at: i.created_at as string,
+          threadsUsername={connection?.username as string | null ?? null}
+          posts={(posts ?? []).map((p) => ({
+            id: p.id as string,
+            text: p.text as string,
+            scheduled_at: p.scheduled_at as string,
+            status: p.status as string,
+            sent_at: (p.sent_at as string | null) ?? null,
+            sent_post_id: (p.sent_post_id as string | null) ?? null,
+            error_message: (p.error_message as string | null) ?? null,
+            template_id: (p.template_id as string | null) ?? null,
           }))}
-          winning={(winning ?? []).map((w) => ({
-            id: w.id as string,
-            pattern_type: w.pattern_type as string,
-            example_text: w.example_text as string,
-            context_summary: (w.context_summary as string | null) ?? null,
-            outcome_score: (w.outcome_score as number | null) ?? null,
-            created_at: w.created_at as string,
+          templates={(templates ?? []).map((tp) => ({
+            id: tp.id as string,
+            name: tp.name as string,
+            prompt: tp.prompt as string,
+            recurrence: tp.recurrence as "daily" | "weekly",
+            weekday: (tp.weekday as number | null) ?? null,
+            time_of_day: tp.time_of_day as string,
+            next_run_at: tp.next_run_at as string,
+            active: tp.active as boolean,
           }))}
         />
       </section>
