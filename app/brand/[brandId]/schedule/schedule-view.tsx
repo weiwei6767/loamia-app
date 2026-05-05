@@ -68,30 +68,98 @@ export function ScheduleView({
   return (
     <div className="space-y-10">
       {!threadsUsername && (
-        <div className="border border-yellow-400/40 bg-yellow-400/5 p-4 text-sm">
-          ⚠️ 尚未連接 Threads 帳號。
+        <div className="border border-red-400/50 bg-red-400/5 p-4 text-sm">
+          ⚠️ <strong>尚未連接 Threads 帳號</strong>——排程的貼文將無法發送
           <a href={`/brand/${brandId}/monitor`} className="ml-2 underline text-[var(--accent)]">
             前往 MONITOR 連接 →
           </a>
-          連接後排程貼文才能實際發送。
         </div>
       )}
       {threadsUsername && (
-        <div className="text-xs text-[var(--muted)] font-mono">
-          🧵 將以 <span className="text-[var(--accent)]">@{threadsUsername}</span> 身份發送
-        </div>
+        <DestinationBanner brandId={brandId} username={threadsUsername} pendingCount={pending.length} />
       )}
 
-      <SinglePostScheduler brandId={brandId} />
-      <BulkScheduler brandId={brandId} />
-      <TemplateScheduler brandId={brandId} templates={templates} />
+      <SinglePostScheduler brandId={brandId} threadsUsername={threadsUsername} />
+      <BulkScheduler brandId={brandId} threadsUsername={threadsUsername} />
+      <TemplateScheduler brandId={brandId} templates={templates} threadsUsername={threadsUsername} />
       <PendingList posts={pending} brandId={brandId} />
       <HistoryList posts={history} brandId={brandId} />
     </div>
   );
 }
 
-function SinglePostScheduler({ brandId }: { brandId: string }) {
+function DestinationBanner({
+  brandId,
+  username,
+  pendingCount,
+}: {
+  brandId: string;
+  username: string;
+  pendingCount: number;
+}) {
+  const router = useRouter();
+  const [running, setRunning] = useState(false);
+  const [msg, setMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
+
+  async function runNow() {
+    setRunning(true);
+    setMsg(null);
+    try {
+      const res = await fetch(`/api/brand/${brandId}/run-scheduler`, { method: "POST" });
+      const data = await res.json();
+      if (res.ok) {
+        setMsg({
+          kind: "ok",
+          text: `處理完成 · 已發送 ${data.sent} · 失敗 ${data.failed} · 模板觸發 ${data.templates_run}`,
+        });
+        setTimeout(() => router.refresh(), 600);
+      } else {
+        setMsg({ kind: "err", text: data.error ?? "執行失敗" });
+      }
+    } catch (err) {
+      setMsg({ kind: "err", text: err instanceof Error ? err.message : "網路錯誤" });
+    } finally {
+      setRunning(false);
+      setTimeout(() => setMsg(null), 6000);
+    }
+  }
+
+  return (
+    <div className="border border-[var(--accent)]/30 bg-[var(--accent)]/5 p-4 space-y-2">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div className="text-sm">
+          🧵 發送目的地：<span className="text-[var(--accent)] font-bold">Threads · @{username}</span>
+          <span className="text-[var(--muted)] ml-2 text-xs">（每個品牌目前只能連一個 Threads）</span>
+        </div>
+        <button
+          type="button"
+          onClick={runNow}
+          disabled={running}
+          className="text-xs px-3 py-1.5 border border-[var(--accent)] text-[var(--accent)] hover:bg-[var(--accent)] hover:text-[var(--background)] transition disabled:opacity-50 inline-flex items-center gap-1.5"
+          title="立即處理所有到期的排程（不等 cron）"
+        >
+          {running ? <><span className="spinner" /> 執行中</> : `🔄 立即執行（${pendingCount} 待發）`}
+        </button>
+      </div>
+      <p className="text-[10px] text-[var(--muted)] leading-relaxed">
+        ⏰ 自動排程目前每天執行 1 次（Vercel Hobby 限制）。需要準時請手動「立即執行」，或升級 Pro 解鎖每分鐘執行。
+      </p>
+      {msg && (
+        <p className={`text-xs ${msg.kind === "ok" ? "text-[var(--accent)]" : "text-red-400"}`}>
+          {msg.text}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function SinglePostScheduler({
+  brandId,
+  threadsUsername,
+}: {
+  brandId: string;
+  threadsUsername: string | null;
+}) {
   const router = useRouter();
   const formRef = useRef<HTMLFormElement>(null);
   const [state, action, pending] = useActionState<ScheduleState, FormData>(
@@ -164,6 +232,9 @@ function SinglePostScheduler({ brandId }: { brandId: string }) {
           >
             {pending ? <><span className="spinner" /> 排程中</> : "📅 加入排程"}
           </button>
+          {threadsUsername && (
+            <span className="text-[10px] text-[var(--muted)] font-mono">→ @{threadsUsername}</span>
+          )}
         </div>
         {state && "error" in state && (
           <p className="text-xs text-red-400 whitespace-pre-wrap">{state.error}</p>
@@ -173,7 +244,13 @@ function SinglePostScheduler({ brandId }: { brandId: string }) {
   );
 }
 
-function BulkScheduler({ brandId }: { brandId: string }) {
+function BulkScheduler({
+  brandId,
+  threadsUsername,
+}: {
+  brandId: string;
+  threadsUsername: string | null;
+}) {
   const router = useRouter();
   const formRef = useRef<HTMLFormElement>(null);
   const [state, action, pending] = useActionState<BulkScheduleState, FormData>(
@@ -214,13 +291,18 @@ function BulkScheduler({ brandId }: { brandId: string }) {
           placeholder={`2026-05-10T09:00\n早安！本週咖啡新品上市，買一送一活動到週日 ☕\n===POST===\n2026-05-12T18:00\n感謝大家熱烈支持，第二波預購開放！`}
           className="w-full border border-[var(--line)] bg-[var(--surface-2)] px-3 py-2 text-sm font-mono focus:border-[var(--accent)] focus:outline-none leading-relaxed"
         />
-        <button
-          type="submit"
-          disabled={pending}
-          className="bg-[var(--accent)] px-5 py-2 text-xs font-bold tracking-wide text-[var(--background)] hover:bg-[var(--accent-glow)] transition disabled:opacity-50 inline-flex items-center gap-1.5"
-        >
-          {pending ? <><span className="spinner" /> 處理中</> : "📅📅 批次排程"}
-        </button>
+        <div className="flex items-center gap-3 flex-wrap">
+          <button
+            type="submit"
+            disabled={pending}
+            className="bg-[var(--accent)] px-5 py-2 text-xs font-bold tracking-wide text-[var(--background)] hover:bg-[var(--accent-glow)] transition disabled:opacity-50 inline-flex items-center gap-1.5"
+          >
+            {pending ? <><span className="spinner" /> 處理中</> : "📅📅 批次排程"}
+          </button>
+          {threadsUsername && (
+            <span className="text-[10px] text-[var(--muted)] font-mono">→ 全部發到 @{threadsUsername}</span>
+          )}
+        </div>
         {state && "error" in state && (
           <p className="text-xs text-red-400 whitespace-pre-wrap">{state.error}</p>
         )}
@@ -235,9 +317,11 @@ function BulkScheduler({ brandId }: { brandId: string }) {
 function TemplateScheduler({
   brandId,
   templates,
+  threadsUsername,
 }: {
   brandId: string;
   templates: Template[];
+  threadsUsername: string | null;
 }) {
   const router = useRouter();
   const formRef = useRef<HTMLFormElement>(null);
@@ -336,6 +420,9 @@ function TemplateScheduler({
             >
               {pending ? <><span className="spinner" /> 建立中</> : "✓ 建立模板"}
             </button>
+            {threadsUsername && (
+              <span className="text-[10px] text-[var(--muted)] font-mono">→ @{threadsUsername}</span>
+            )}
           </div>
           {state && "error" in state && (
             <p className="text-xs text-red-400">{state.error}</p>
