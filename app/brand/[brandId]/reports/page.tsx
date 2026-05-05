@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getServerT } from "@/lib/i18n/server";
+import { BrandStatusToggle } from "../brand-status-toggle";
 import { GenerateForm } from "./generate-form";
 import { ReportsList } from "./reports-list";
 
@@ -17,7 +18,7 @@ export default async function ReportsPage({
 
   const { data: brand } = await supabase
     .from("brands")
-    .select("id, name")
+    .select("id, name, status")
     .eq("id", brandId)
     .single();
   if (!brand) notFound();
@@ -63,38 +64,44 @@ export default async function ReportsPage({
               <h1 className="text-lg font-bold truncate">{brand.name}</h1>
             </div>
           </div>
-          <nav className="flex items-center gap-1 text-xs font-mono">
-            <Link
-              href={`/brand/${brand.id}`}
-              className="px-3 py-1.5 text-[var(--muted)] hover:text-[var(--foreground)]"
-            >
-              {t("reports.chat")}
-            </Link>
-            <Link
-              href={`/brand/${brand.id}/data`}
-              className="px-3 py-1.5 text-[var(--muted)] hover:text-[var(--foreground)]"
-            >
-              {t("data.nav")}
-            </Link>
-            <Link
-              href={`/brand/${brand.id}/content`}
-              className="px-3 py-1.5 text-[var(--muted)] hover:text-[var(--foreground)]"
-            >
-              {t("content.nav")}
-            </Link>
-            <Link
-              href={`/brand/${brand.id}/monitor`}
-              className="px-3 py-1.5 text-[var(--muted)] hover:text-[var(--foreground)]"
-            >
-              {t("monitor.nav")}
-            </Link>
-            <Link
-              href={`/brand/${brand.id}/reports`}
-              className="px-3 py-1.5 border-b-2 border-[var(--accent)] text-[var(--accent)]"
-            >
-              {t("reports.nav")}
-            </Link>
-          </nav>
+          <div className="flex items-center gap-3">
+            <nav className="flex items-center gap-1 text-xs font-mono">
+              <Link
+                href={`/brand/${brand.id}`}
+                className="px-3 py-1.5 text-[var(--muted)] hover:text-[var(--foreground)]"
+              >
+                {t("reports.chat")}
+              </Link>
+              <Link
+                href={`/brand/${brand.id}/data`}
+                className="px-3 py-1.5 text-[var(--muted)] hover:text-[var(--foreground)]"
+              >
+                {t("data.nav")}
+              </Link>
+              <Link
+                href={`/brand/${brand.id}/content`}
+                className="px-3 py-1.5 text-[var(--muted)] hover:text-[var(--foreground)]"
+              >
+                {t("content.nav")}
+              </Link>
+              <Link
+                href={`/brand/${brand.id}/monitor`}
+                className="px-3 py-1.5 text-[var(--muted)] hover:text-[var(--foreground)]"
+              >
+                {t("monitor.nav")}
+              </Link>
+              <Link
+                href={`/brand/${brand.id}/reports`}
+                className="px-3 py-1.5 border-b-2 border-[var(--accent)] text-[var(--accent)]"
+              >
+                {t("reports.nav")}
+              </Link>
+            </nav>
+            <BrandStatusToggle
+              brandId={brand.id}
+              status={brand.status as "active" | "archived"}
+            />
+          </div>
         </div>
       </header>
 
