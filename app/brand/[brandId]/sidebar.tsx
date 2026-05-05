@@ -22,6 +22,7 @@ export function BrandSidebar({ brandId }: { brandId: string }) {
     { href: (b) => `/brand/${b}/content`, label: t("content.nav"), icon: "✏️" },
     { href: (b) => `/brand/${b}/monitor`, label: t("monitor.nav"), icon: "🌊" },
     { href: (b) => `/brand/${b}/schedule`, label: "SCHEDULE", icon: "📅" },
+    { href: (b) => `/brand/${b}/kol`, label: "KOL", icon: "🤝" },
     { href: (b) => `/brand/${b}/reports`, label: t("reports.nav"), icon: "📊" },
   ];
 
