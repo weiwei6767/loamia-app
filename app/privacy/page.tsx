@@ -1,25 +1,62 @@
 import Link from "next/link";
+import { cookies } from "next/headers";
 
 export const metadata = {
   title: "Privacy Policy — Loamia",
-  description: "Loamia 的隱私權政策",
+  description: "Loamia Privacy Policy / 隱私權政策",
 };
 
-export default function PrivacyPolicyPage() {
+export default async function PrivacyPolicyPage() {
+  const c = await cookies();
+  const locale = c.get("loamia.locale")?.value === "en" ? "en" : "zh";
+  return locale === "en" ? <PrivacyEN /> : <PrivacyZH />;
+}
+
+function Shell({ locale, children }: { locale: "zh" | "en"; children: React.ReactNode }) {
   return (
     <main className="min-h-screen bg-[var(--background)] text-[var(--foreground)]">
       <header className="border-b border-[var(--line)]">
-        <div className="mx-auto max-w-3xl px-4 md:px-6 py-4 flex items-center justify-between">
-          <Link href="/" className="text-sm font-bold tracking-wide">
-            LOAMIA
+        <div className="mx-auto max-w-3xl px-4 md:px-6 py-4 flex items-center justify-between gap-3">
+          <Link href="/" className="text-sm font-bold tracking-wide hover:text-[var(--accent)] transition">
+            ← LOAMIA
           </Link>
           <nav className="flex items-center gap-4 text-xs text-[var(--muted)]">
-            <Link href="/privacy" className="text-[var(--accent)]">隱私權政策</Link>
-            <Link href="/terms" className="hover:text-[var(--foreground)]">服務條款</Link>
+            <Link href="/privacy" className="text-[var(--accent)]">
+              {locale === "en" ? "Privacy" : "隱私權"}
+            </Link>
+            <Link href="/terms" className="hover:text-[var(--foreground)]">
+              {locale === "en" ? "Terms" : "服務條款"}
+            </Link>
           </nav>
         </div>
       </header>
+      {children}
+      <footer className="border-t border-[var(--line)] mt-12">
+        <div className="mx-auto max-w-3xl px-4 md:px-6 py-6 flex items-center justify-between text-xs text-[var(--muted)]">
+          <span>© 2026 Loamia. All rights reserved.</span>
+          <div className="flex gap-4">
+            <Link href="/" className="hover:text-[var(--foreground)]">
+              {locale === "en" ? "← Back to home" : "← 返回首頁"}
+            </Link>
+          </div>
+        </div>
+      </footer>
+    </main>
+  );
+}
 
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <section className="space-y-3">
+      <h2 className="text-xl font-bold border-l-2 border-[var(--accent)] pl-3">{title}</h2>
+      <div className="space-y-3">{children}</div>
+    </section>
+  );
+}
+
+function PrivacyZH() {
+  return (
+    <Shell locale="zh">
       <article className="mx-auto max-w-3xl px-4 md:px-6 py-12 space-y-8 text-sm leading-relaxed">
         <div>
           <div className="font-mono text-xs tracking-widest text-[var(--accent)]">PRIVACY POLICY</div>
@@ -38,7 +75,6 @@ export default function PrivacyPolicyPage() {
 
         <Section title="1. 我們收集的資訊">
           <p>我們僅收集為提供與改善服務所必要的資訊。資料來源與類別如下：</p>
-
           <h3 className="font-bold text-base mt-4">1.1 您主動提供的資訊</h3>
           <ul className="list-disc pl-5 space-y-1">
             <li><strong>帳戶資料</strong>：電子郵件地址、姓名、密碼（經 hash 加密儲存）、所屬代理商或品牌。</li>
@@ -47,17 +83,11 @@ export default function PrivacyPolicyPage() {
             <li><strong>客戶內容</strong>：您於本服務內輸入或貼上之社群留言、貼文、品牌素材等。</li>
             <li><strong>付款資訊</strong>：若未來開放付費訂閱，將透過第三方支付服務商處理，本服務本身不儲存信用卡完整號碼。</li>
           </ul>
-
           <h3 className="font-bold text-base mt-4">1.2 透過第三方授權取得</h3>
           <ul className="list-disc pl-5 space-y-1">
-            <li>
-              <strong>Meta / Threads OAuth</strong>：您授權連接 Threads 帳號後，我們會取得您的 Threads 使用者 ID、使用者名稱、長期存取權杖（Access Token）。我們僅用此權杖代表您查詢、發佈或回覆 Threads 內容，並依您的指示為之。
-            </li>
-            <li>
-              <strong>Threads API 內容資料</strong>：包括公開貼文文字、發佈時間、permalink、貼文作者使用者名稱（僅限您透過本服務搜尋或抓取之內容）。
-            </li>
+            <li><strong>Meta / Threads OAuth</strong>：您授權連接 Threads 帳號後，我們會取得您的 Threads 使用者 ID、使用者名稱、長期存取權杖（Access Token）。我們僅用此權杖代表您查詢、發佈或回覆 Threads 內容，並依您的指示為之。</li>
+            <li><strong>Threads API 內容資料</strong>：包括公開貼文文字、發佈時間、permalink、貼文作者使用者名稱（僅限您透過本服務搜尋或抓取之內容）。</li>
           </ul>
-
           <h3 className="font-bold text-base mt-4">1.3 自動收集的資訊</h3>
           <ul className="list-disc pl-5 space-y-1">
             <li>裝置資訊（瀏覽器類型、作業系統、IP 位址）。</li>
@@ -91,9 +121,7 @@ export default function PrivacyPolicyPage() {
             <li><strong>OpenAI</strong>（向量嵌入）— 將文件內容轉為向量，供語意搜尋使用。</li>
             <li><strong>Meta / Threads</strong>（社群整合）— 處理 OAuth 授權與 Threads 內容操作。</li>
           </ul>
-          <p className="mt-3">
-            上述服務商皆為國際知名平台，並依其各自之隱私政策處理資料。我們不會將您的資料出售予任何第三方，亦不會用於與本服務無關之目的。
-          </p>
+          <p className="mt-3">上述服務商皆為國際知名平台，並依其各自之隱私政策處理資料。我們不會將您的資料出售予任何第三方，亦不會用於與本服務無關之目的。</p>
         </Section>
 
         <Section title="4. Threads / Meta 資料專章">
@@ -129,9 +157,7 @@ export default function PrivacyPolicyPage() {
             <li>定期安全更新與漏洞掃描。</li>
             <li>最小權限原則：員工僅在必要範圍內存取資料。</li>
           </ul>
-          <p className="mt-3">
-            然而，網際網路傳輸與電子儲存之絕對安全並不存在。如發生資料外洩事件，我們將依據適用法規於 72 小時內通知您與相關主管機關。
-          </p>
+          <p className="mt-3">然而，網際網路傳輸與電子儲存之絕對安全並不存在。如發生資料外洩事件，我們將依據適用法規於 72 小時內通知您與相關主管機關。</p>
         </Section>
 
         <Section title="7. 您的權利">
@@ -148,9 +174,7 @@ export default function PrivacyPolicyPage() {
           </ul>
           <p className="mt-3">
             行使上述權利請來信至{" "}
-            <a href="mailto:privacy@loamia.xyz" className="text-[var(--accent)] underline">
-              privacy@loamia.xyz
-            </a>
+            <a href="mailto:hello@loamia.xyz" className="text-[var(--accent)] underline">hello@loamia.xyz</a>
             。我們將於收到請求後 30 日內回覆。
           </p>
         </Section>
@@ -162,58 +186,190 @@ export default function PrivacyPolicyPage() {
             <li><strong>功能性 Cookies</strong>：記憶您的介面設定（深淺色、語言、上次選取的品牌）。</li>
             <li><strong>分析 Cookies</strong>（未來可能使用）：協助我們了解使用者行為並改善服務。將事先取得您的同意。</li>
           </ul>
-          <p className="mt-3">
-            您可於瀏覽器設定中拒絕所有 Cookies，但部分功能將無法使用。
-          </p>
+          <p className="mt-3">您可於瀏覽器設定中拒絕所有 Cookies，但部分功能將無法使用。</p>
         </Section>
 
         <Section title="9. 兒童隱私">
-          <p>
-            本服務不向未滿 16 歲之個人提供。我們不會故意收集未滿 16 歲使用者之個人資料。若您發現未成年子女向我們提供了個人資料，請立即聯絡我們，我們將盡速刪除。
-          </p>
+          <p>本服務不向未滿 16 歲之個人提供。我們不會故意收集未滿 16 歲使用者之個人資料。若您發現未成年子女向我們提供了個人資料，請立即聯絡我們，我們將盡速刪除。</p>
         </Section>
 
         <Section title="10. 國際資料傳輸">
-          <p>
-            您的資料可能傳輸至您居住地以外的國家／地區處理（例如美國、歐盟）。我們會確保此等傳輸有適當的法律基礎與保護措施，包括採用標準合約條款（SCCs）或同等機制。
-          </p>
+          <p>您的資料可能傳輸至您居住地以外的國家／地區處理（例如美國、歐盟）。我們會確保此等傳輸有適當的法律基礎與保護措施，包括採用標準合約條款（SCCs）或同等機制。</p>
         </Section>
 
         <Section title="11. 政策變更">
-          <p>
-            我們可能不時更新本政策。重大變更將透過電子郵件或服務內顯著通知方式告知您，並更新本頁頂部之「最後更新」日期。重大變更於通知後 30 日生效；繼續使用本服務即視為接受新政策。
-          </p>
+          <p>我們可能不時更新本政策。重大變更將透過電子郵件或服務內顯著通知方式告知您，並更新本頁頂部之「最後更新」日期。重大變更於通知後 30 日生效；繼續使用本服務即視為接受新政策。</p>
         </Section>
 
         <Section title="12. 聯絡我們">
-          <p>
-            若您對本政策、資料處理方式或行使權利有任何疑問，請聯絡：
-          </p>
+          <p>若您對本政策、資料處理方式或行使權利有任何疑問，請聯絡：</p>
           <ul className="list-disc pl-5 space-y-1">
-            <li>電子郵件：<a href="mailto:privacy@loamia.xyz" className="text-[var(--accent)] underline">privacy@loamia.xyz</a></li>
-            <li>一般詢問：<a href="mailto:hello@loamia.xyz" className="text-[var(--accent)] underline">hello@loamia.xyz</a></li>
+            <li>電子郵件：<a href="mailto:hello@loamia.xyz" className="text-[var(--accent)] underline">hello@loamia.xyz</a></li>
           </ul>
         </Section>
       </article>
-
-      <footer className="border-t border-[var(--line)] mt-12">
-        <div className="mx-auto max-w-3xl px-4 md:px-6 py-6 flex items-center justify-between text-xs text-[var(--muted)]">
-          <span>© 2026 Loamia. All rights reserved.</span>
-          <div className="flex gap-4">
-            <Link href="/privacy" className="hover:text-[var(--foreground)]">Privacy</Link>
-            <Link href="/terms" className="hover:text-[var(--foreground)]">Terms</Link>
-          </div>
-        </div>
-      </footer>
-    </main>
+    </Shell>
   );
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function PrivacyEN() {
   return (
-    <section className="space-y-3">
-      <h2 className="text-xl font-bold border-l-2 border-[var(--accent)] pl-3">{title}</h2>
-      <div className="space-y-3">{children}</div>
-    </section>
+    <Shell locale="en">
+      <article className="mx-auto max-w-3xl px-4 md:px-6 py-12 space-y-8 text-sm leading-relaxed">
+        <div>
+          <div className="font-mono text-xs tracking-widest text-[var(--accent)]">PRIVACY POLICY</div>
+          <h1 className="mt-2 text-3xl md:text-4xl font-bold">Privacy Policy</h1>
+          <p className="mt-3 text-xs text-[var(--muted)] font-mono">Last updated: May 5, 2026</p>
+        </div>
+
+        <section className="space-y-3">
+          <p>
+            Loamia (&quot;we&quot;, &quot;our&quot;, &quot;the Service&quot;) respects and values your privacy. This Privacy Policy
+            describes how we collect, use, disclose, store, and protect your and your customers&apos; personal data when
+            you use the Service (including loamia.xyz, app.loamia.xyz and related products).
+          </p>
+          <p>
+            By using the Service you agree to the data practices described in this Policy. If you do not agree, please
+            discontinue use of the Service.
+          </p>
+        </section>
+
+        <Section title="1. Information We Collect">
+          <p>We collect only information necessary to provide and improve the Service:</p>
+          <h3 className="font-bold text-base mt-4">1.1 Information you provide</h3>
+          <ul className="list-disc pl-5 space-y-1">
+            <li><strong>Account data</strong>: email, name, password (hashed), agency/brand membership.</li>
+            <li><strong>Brand and project data</strong>: brand name, logo, positioning, target audience, tone, competitor info.</li>
+            <li><strong>Uploaded documents</strong>: PDF, Word, Excel, PowerPoint, CSV, TXT files you upload (for AI knowledge base).</li>
+            <li><strong>Customer content</strong>: social comments, posts, brand assets you input or paste in the Service.</li>
+            <li><strong>Payment information</strong>: if paid plans launch, processed via third-party processors; we do not store full card numbers.</li>
+          </ul>
+          <h3 className="font-bold text-base mt-4">1.2 Via third-party authorization</h3>
+          <ul className="list-disc pl-5 space-y-1">
+            <li><strong>Meta / Threads OAuth</strong>: when you connect a Threads account, we obtain your Threads user ID, username, and long-lived access token. We use the token only to query, publish, or reply on Threads on your behalf and at your direction.</li>
+            <li><strong>Threads API content</strong>: public post text, timestamps, permalinks, author usernames you query through the Service.</li>
+          </ul>
+          <h3 className="font-bold text-base mt-4">1.3 Automatically collected</h3>
+          <ul className="list-disc pl-5 space-y-1">
+            <li>Device info (browser, OS, IP address).</li>
+            <li>Usage logs (pages visited, action times, feature usage).</li>
+            <li>Cookies and similar technologies (see Section 8).</li>
+          </ul>
+        </Section>
+
+        <Section title="2. How We Use Your Information">
+          <p>Collected data is used solely for the following purposes:</p>
+          <ul className="list-disc pl-5 space-y-1">
+            <li>Provide, maintain, and improve core Service features (AI chat, report generation, content creation, social monitoring & reply).</li>
+            <li>Build an AI knowledge base from your uploaded brand documents to generate on-brand content.</li>
+            <li>Execute search, publish, reply operations on Threads via your authorized account, at your direction.</li>
+            <li>Detect and prevent abuse, fraud, and violations of this Policy or our Terms.</li>
+            <li>Comply with legal obligations and respond to lawful authority requests.</li>
+            <li>Send service updates, security alerts, and policy changes by email (you can unsubscribe from marketing email anytime).</li>
+          </ul>
+          <p className="mt-3">
+            <strong>We do not use your personal or brand data to train any third-party AI model.</strong>{" "}
+            Content sent to Anthropic Claude / OpenAI Embeddings is used for inference only and, per their respective
+            terms, may not be used to train models.
+          </p>
+        </Section>
+
+        <Section title="3. Third-Party Services and Processors">
+          <p>The Service uses the following trusted processors. Your data may be transmitted to them to perform specific functions:</p>
+          <ul className="list-disc pl-5 space-y-1">
+            <li><strong>Supabase</strong> (database & auth) — stores accounts, brands, documents, vector indexes.</li>
+            <li><strong>Vercel</strong> (application hosting) — provides serverless compute and file storage.</li>
+            <li><strong>Anthropic Claude</strong> (AI inference) — processes chat, report, and content generation requests.</li>
+            <li><strong>OpenAI</strong> (vector embeddings) — converts document content to vectors for semantic search.</li>
+            <li><strong>Meta / Threads</strong> (social integration) — handles OAuth and Threads content operations.</li>
+          </ul>
+          <p className="mt-3">All are well-known global platforms and process data per their own privacy policies. We do not sell your data, nor use it for purposes unrelated to the Service.</p>
+        </Section>
+
+        <Section title="4. Threads / Meta Data — Specific Notice">
+          <p>To comply with Meta&apos;s platform policies:</p>
+          <ul className="list-disc pl-5 space-y-1">
+            <li>We access your Threads account only after you actively authorize, and only within the permission scopes you grant.</li>
+            <li>Long-lived access tokens are encrypted at rest in Supabase and accessible only to the Service backend.</li>
+            <li>You may disconnect at any time from the Loamia Monitor page (&quot;Disconnect&quot;), or revoke our access in Threads App → Settings → Website permissions.</li>
+            <li>After disconnection, we delete the associated token and cached data within 30 days.</li>
+            <li>Public post data fetched via the Threads API is held in memory for the current operation only; it is not persisted in our database.</li>
+            <li>Content you publish or reply through the Service belongs to you per Meta&apos;s terms; we do not claim any rights in it.</li>
+          </ul>
+        </Section>
+
+        <Section title="5. Data Location and Retention">
+          <ul className="list-disc pl-5 space-y-1">
+            <li>Primary data centers are in regions designated by Supabase and Vercel (typically US or EU); cross-border transfer may apply.</li>
+            <li>Account data: retained until you delete your account, or 24 months after last login.</li>
+            <li>Brand and document data: retained until you delete it.</li>
+            <li>Threads access tokens: valid for 60 days, auto-refreshed before expiry; deleted within 30 days after disconnection.</li>
+            <li>System logs: 90 days.</li>
+            <li>Data required by legal or accounting obligations: minimum period required by applicable law.</li>
+          </ul>
+        </Section>
+
+        <Section title="6. Data Security">
+          <p>Technical and organizational measures we apply:</p>
+          <ul className="list-disc pl-5 space-y-1">
+            <li>Transport-layer encryption (HTTPS / TLS 1.3).</li>
+            <li>Database-level encryption and Row Level Security (RLS) isolation.</li>
+            <li>Encrypted storage of OAuth access tokens.</li>
+            <li>Passwords hashed with industry-standard algorithms (bcrypt / Argon2).</li>
+            <li>Regular security updates and vulnerability scans.</li>
+            <li>Least-privilege principle: staff access only what is necessary.</li>
+          </ul>
+          <p className="mt-3">No internet transmission or electronic storage is absolutely secure. In the event of a data breach we will notify you and the relevant authorities within 72 hours per applicable law.</p>
+        </Section>
+
+        <Section title="7. Your Rights">
+          <p>Subject to applicable data protection law (including GDPR and Taiwan PDPA), you have the right to:</p>
+          <ul className="list-disc pl-5 space-y-1">
+            <li><strong>Access</strong> — confirm whether we process your data and obtain a copy.</li>
+            <li><strong>Rectification</strong> — request correction of inaccurate or incomplete data.</li>
+            <li><strong>Erasure</strong> (right to be forgotten) — request deletion, except where retention is legally required.</li>
+            <li><strong>Restriction</strong> — request restricted processing in certain circumstances.</li>
+            <li><strong>Portability</strong> — receive your data in a structured, commonly used, machine-readable format.</li>
+            <li><strong>Object</strong> — object to processing based on legitimate interests.</li>
+            <li><strong>Withdraw consent</strong> — without affecting prior lawful processing.</li>
+            <li><strong>Lodge a complaint</strong> with your local data protection authority.</li>
+          </ul>
+          <p className="mt-3">
+            To exercise these rights, email{" "}
+            <a href="mailto:hello@loamia.xyz" className="text-[var(--accent)] underline">hello@loamia.xyz</a>.
+            We will respond within 30 days.
+          </p>
+        </Section>
+
+        <Section title="8. Cookies and Similar Technologies">
+          <p>The Service uses the following categories of cookies:</p>
+          <ul className="list-disc pl-5 space-y-1">
+            <li><strong>Strictly necessary</strong>: maintain login state, CSRF protection, language/theme preferences. Without these the Service cannot function.</li>
+            <li><strong>Functional</strong>: remember UI settings (dark/light, language, last-selected brand).</li>
+            <li><strong>Analytics</strong> (potentially in the future): help us understand user behavior and improve the Service. Will require your prior consent.</li>
+          </ul>
+          <p className="mt-3">You can refuse all cookies in your browser settings, but some features will become unavailable.</p>
+        </Section>
+
+        <Section title="9. Children&apos;s Privacy">
+          <p>The Service is not directed to individuals under 16. We do not knowingly collect personal data from minors. If you discover that a minor has provided personal data to us, please contact us immediately and we will delete it as quickly as possible.</p>
+        </Section>
+
+        <Section title="10. International Data Transfers">
+          <p>Your data may be transferred outside your country of residence (e.g., to the US or EU). We ensure such transfers have an appropriate legal basis and protections, including Standard Contractual Clauses (SCCs) or equivalent mechanisms.</p>
+        </Section>
+
+        <Section title="11. Policy Changes">
+          <p>We may update this Policy from time to time. Material changes will be communicated via email or prominent in-Service notice, and the &quot;Last updated&quot; date at the top of this page will be updated. Material changes take effect 30 days after notice; continued use of the Service constitutes acceptance.</p>
+        </Section>
+
+        <Section title="12. Contact Us">
+          <p>For questions about this Policy, our data practices, or to exercise your rights, contact:</p>
+          <ul className="list-disc pl-5 space-y-1">
+            <li>Email: <a href="mailto:hello@loamia.xyz" className="text-[var(--accent)] underline">hello@loamia.xyz</a></li>
+          </ul>
+        </Section>
+      </article>
+    </Shell>
   );
 }

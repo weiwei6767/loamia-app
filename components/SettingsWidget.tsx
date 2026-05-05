@@ -26,7 +26,7 @@ export function SettingsWidget() {
   }, []);
 
   return (
-    <div ref={ref} className="fixed right-4 top-4 md:right-6 md:top-6 z-[100]">
+    <div ref={ref} className="fixed left-4 bottom-4 md:left-6 md:bottom-6 z-[100]">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
@@ -47,7 +47,7 @@ export function SettingsWidget() {
 
       {open && (
         <div
-          className="absolute right-0 top-full mt-2 w-56 border bg-[var(--surface)]/95 backdrop-blur-xl shadow-2xl"
+          className="absolute left-0 bottom-full mb-2 w-56 border bg-[var(--surface)]/95 backdrop-blur-xl shadow-2xl"
           style={{
             borderColor: "var(--line)",
             animation: "widget-pop 0.2s cubic-bezier(0.16, 1, 0.3, 1)",
