@@ -17,12 +17,12 @@ export function BrandSidebar({ brandId }: { brandId: string }) {
 
   const items: Item[] = [
     { href: (b) => `/brand/${b}`, label: t("reports.chat"), icon: "💬", matchExact: true },
-    { href: (b) => `/brand/${b}/brain`, label: "BRAIN", icon: "🧠" },
+    { href: (b) => `/brand/${b}/brain`, label: t("nav.brain"), icon: "🧠" },
     { href: (b) => `/brand/${b}/data`, label: t("data.nav"), icon: "📁" },
     { href: (b) => `/brand/${b}/content`, label: t("content.nav"), icon: "✏️" },
     { href: (b) => `/brand/${b}/monitor`, label: t("monitor.nav"), icon: "🌊" },
-    { href: (b) => `/brand/${b}/schedule`, label: "SCHEDULE", icon: "📅" },
-    { href: (b) => `/brand/${b}/kol`, label: "KOL", icon: "🤝" },
+    { href: (b) => `/brand/${b}/schedule`, label: t("nav.schedule"), icon: "📅" },
+    { href: (b) => `/brand/${b}/kol`, label: t("nav.kol"), icon: "🤝" },
     { href: (b) => `/brand/${b}/reports`, label: t("reports.nav"), icon: "📊" },
   ];
 

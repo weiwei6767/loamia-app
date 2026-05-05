@@ -41,7 +41,10 @@ export const dict = {
 
   // Brand workspace
   "brand.back": { zh: "← 返回", en: "← Back" },
-  "brand.label": { zh: "BRAND", en: "BRAND" },
+  "brand.label": { zh: "品牌", en: "BRAND" },
+  "nav.brain": { zh: "品牌大腦", en: "BRAIN" },
+  "nav.schedule": { zh: "排程", en: "SCHEDULE" },
+  "nav.kol": { zh: "KOL 名單", en: "KOL" },
   "brand.status.active": { zh: "● 活躍", en: "● Active" },
   "brand.status.archived": { zh: "○ 已封存", en: "○ Archived" },
   "brand.threads": { zh: "THREADS", en: "THREADS" },
@@ -60,7 +63,7 @@ export const dict = {
   "brand.upload.period": { zh: "資料期間（可選）", en: "Period (optional)" },
   "brand.upload.period.placeholder": { zh: "例：2025-11", en: "e.g. 2025-11" },
   "brand.documents": { zh: "DOCUMENTS", en: "DOCUMENTS" },
-  "data.nav": { zh: "DATA", en: "DATA" },
+  "data.nav": { zh: "資料", en: "DATA" },
   "data.title": { zh: "資料庫", en: "Data" },
   "data.subtitle": { zh: "此品牌共用的所有資料 — Brand GPT 對話、Auto Report 都會從這裡撈", en: "All shared data for this brand — Brand GPT and Auto Report pull from here" },
   "data.docs.section": { zh: "文件資料", en: "Documents" },
@@ -89,7 +92,7 @@ export const dict = {
   "data.list.deselect": { zh: "取消", en: "Deselect" },
   "data.list.delete_selected": { zh: "刪除已選", en: "Delete selected" },
   "data.list.delete_confirm": { zh: "確定刪除選擇的檔案？此動作無法還原", en: "Delete selected files? This cannot be undone" },
-  "content.nav": { zh: "CONTENT", en: "CONTENT" },
+  "content.nav": { zh: "內容", en: "CONTENT" },
   "content.title": { zh: "文案生成", en: "Content Studio" },
   "content.subtitle": { zh: "AI 依品牌風格產出多版本文案、活動企劃", en: "AI generates multi-variant copy and campaign plans in your brand voice" },
   "content.type.label": { zh: "內容類型", en: "Content type" },
@@ -118,7 +121,7 @@ export const dict = {
   "content.expand": { zh: "展開", en: "Expand" },
   "content.collapse": { zh: "收起", en: "Collapse" },
 
-  "monitor.nav": { zh: "MONITOR", en: "MONITOR" },
+  "monitor.nav": { zh: "海巡", en: "MONITOR" },
   "monitor.title": { zh: "社群海巡", en: "Social Monitor" },
   "monitor.subtitle": { zh: "貼上社群留言或貼文，AI 用品牌語氣產出 3 個回覆建議", en: "Paste a social post/comment; AI drafts 3 reply variants in your brand voice" },
   "monitor.source.label": { zh: "待回覆內容", en: "Source content" },
@@ -223,8 +226,8 @@ export const dict = {
   "citation.close": { zh: "關閉", en: "Close" },
 
   // Reports (Auto Report)
-  "reports.nav": { zh: "REPORTS", en: "REPORTS" },
-  "reports.chat": { zh: "CHAT", en: "CHAT" },
+  "reports.nav": { zh: "報表", en: "REPORTS" },
+  "reports.chat": { zh: "對話", en: "CHAT" },
   "reports.title": { zh: "結案報表", en: "Reports" },
   "reports.subtitle": { zh: "從品牌文件自動生成的結構化月度報表", en: "Structured monthly reports auto-generated from brand documents" },
   "reports.generate": { zh: "生成報表", en: "Generate Report" },
