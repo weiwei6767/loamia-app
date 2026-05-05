@@ -23,26 +23,44 @@ export default async function ReportsPage({
     .single();
   if (!brand) notFound();
 
-  const [{ data: reports }, { data: templates }, { data: sectionPresets }, { data: customStyles }] =
-    await Promise.all([
-      supabase
-        .from("brand_reports")
-        .select("id, title, focus, created_at")
-        .eq("brand_id", brand.id)
-        .order("created_at", { ascending: false }),
-      supabase
-        .from("report_templates")
-        .select("id, name, sections, tone, length, lang, style")
-        .order("created_at", { ascending: false }),
-      supabase
-        .from("section_presets")
-        .select("id, name, sections")
-        .order("created_at", { ascending: false }),
-      supabase
-        .from("custom_styles")
-        .select("id, name, analysis, created_at")
-        .order("created_at", { ascending: false }),
-    ]);
+  const [
+    { data: reports },
+    { data: templates },
+    { data: sectionPresets },
+    { data: customStyles },
+    { data: docs },
+    { data: threadsConn },
+  ] = await Promise.all([
+    supabase
+      .from("brand_reports")
+      .select("id, title, focus, created_at")
+      .eq("brand_id", brand.id)
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("report_templates")
+      .select("id, name, sections, tone, length, lang, style")
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("section_presets")
+      .select("id, name, sections")
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("custom_styles")
+      .select("id, name, analysis, created_at")
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("documents")
+      .select("id, filename, period, created_at")
+      .eq("brand_id", brand.id)
+      .eq("status", "ready")
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("social_connections")
+      .select("username")
+      .eq("brand_id", brand.id)
+      .eq("platform", "threads")
+      .maybeSingle(),
+  ]);
 
   const t = await getServerT();
 
@@ -119,6 +137,12 @@ export default async function ReportsPage({
           templates={templates ?? []}
           sectionPresets={sectionPresets ?? []}
           customStyles={customStyles ?? []}
+          documents={(docs ?? []).map((d) => ({
+            id: d.id as string,
+            filename: d.filename as string,
+            period: (d.period as string | null) ?? null,
+          }))}
+          threadsUsername={threadsConn?.username as string | null ?? null}
         />
 
         <div className="mt-12">

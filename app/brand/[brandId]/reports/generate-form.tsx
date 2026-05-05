@@ -63,11 +63,15 @@ export function GenerateForm({
   templates,
   sectionPresets,
   customStyles,
+  documents,
+  threadsUsername,
 }: {
   brandId: string;
   templates: SavedTemplate[];
   sectionPresets: SectionPreset[];
   customStyles: CustomStyleRow[];
+  documents: { id: string; filename: string; period: string | null }[];
+  threadsUsername: string | null;
 }) {
   const { t, locale } = useI18n();
   const [state, action, pending] = useActionState<GenerateState, FormData>(generateReport, undefined);
@@ -88,7 +92,19 @@ export function GenerateForm({
   const [presetPending, setPresetPending] = useState(false);
   const [activePreset, setActivePreset] = useState<string | null>("system:standard");
   const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [dataSource, setDataSource] = useState<"auto" | "select">("auto");
+  const [selectedDocIds, setSelectedDocIds] = useState<Set<string>>(new Set());
+  const [includeThreads, setIncludeThreads] = useState(false);
   const router = useRouter();
+
+  function toggleDoc(id: string) {
+    setSelectedDocIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
 
   // Vision upload (inline, between style picker and generate button)
   const visionFileRef = useRef<HTMLInputElement>(null);
@@ -225,6 +241,120 @@ export function GenerateForm({
           placeholder={t("reports.focus.placeholder")}
           className="w-full border border-[var(--line)] bg-[var(--surface-2)] px-3 py-2.5 text-sm focus:border-[var(--accent)] focus:outline-none"
         />
+      </div>
+
+      {/* Data source picker */}
+      <div className="border border-[var(--line)] bg-[var(--surface-2)] p-4 space-y-3">
+        <div className="flex items-center justify-between gap-2">
+          <span className="text-xs font-mono tracking-widest text-[var(--accent)]">
+            {t("reports.source.title")}
+          </span>
+          {documents.length > 0 && (
+            <span className="text-xs text-[var(--muted)]">
+              {documents.length} {t("reports.source.docs_count")}
+            </span>
+          )}
+        </div>
+
+        <div className="flex gap-2 flex-wrap">
+          <button
+            type="button"
+            onClick={() => setDataSource("auto")}
+            className={`text-xs px-3 py-1.5 border transition ${
+              dataSource === "auto"
+                ? "border-[var(--accent)] bg-[var(--accent)] text-[var(--background)] font-bold"
+                : "border-[var(--line)] text-[var(--muted)] hover:border-[var(--accent)]/50"
+            }`}
+          >
+            {t("reports.source.auto")}
+          </button>
+          <button
+            type="button"
+            onClick={() => setDataSource("select")}
+            disabled={documents.length === 0}
+            className={`text-xs px-3 py-1.5 border transition disabled:opacity-50 disabled:cursor-not-allowed ${
+              dataSource === "select"
+                ? "border-[var(--accent)] bg-[var(--accent)] text-[var(--background)] font-bold"
+                : "border-[var(--line)] text-[var(--muted)] hover:border-[var(--accent)]/50"
+            }`}
+          >
+            {t("reports.source.select")}
+          </button>
+        </div>
+
+        {dataSource === "auto" && (
+          <p className="text-xs text-[var(--muted)] leading-relaxed">
+            {t("reports.source.auto.hint")}
+          </p>
+        )}
+
+        {dataSource === "select" && (
+          <div className="space-y-2 max-h-64 overflow-y-auto pt-1">
+            {documents.length === 0 ? (
+              <p className="text-xs text-[var(--muted)]">{t("reports.source.no_docs")}</p>
+            ) : (
+              documents.map((d) => (
+                <label
+                  key={d.id}
+                  className="flex items-start gap-2 px-2 py-1.5 hover:bg-[var(--surface)] cursor-pointer transition"
+                >
+                  <input
+                    type="checkbox"
+                    name="docId"
+                    value={d.id}
+                    checked={selectedDocIds.has(d.id)}
+                    onChange={() => toggleDoc(d.id)}
+                    className="mt-0.5 accent-[var(--accent)]"
+                  />
+                  <div className="flex-1 min-w-0">
+                    <div className="text-xs truncate">{d.filename}</div>
+                    {d.period && (
+                      <div className="text-[10px] text-[var(--muted)] font-mono">· {d.period}</div>
+                    )}
+                  </div>
+                </label>
+              ))
+            )}
+            {documents.length > 0 && (
+              <div className="flex items-center gap-2 pt-2 border-t border-[var(--line)]">
+                <button
+                  type="button"
+                  onClick={() => setSelectedDocIds(new Set(documents.map((d) => d.id)))}
+                  className="text-[10px] text-[var(--muted)] hover:text-[var(--accent)]"
+                >
+                  {t("reports.source.select_all")}
+                </button>
+                <span className="text-[10px] text-[var(--muted)]">·</span>
+                <button
+                  type="button"
+                  onClick={() => setSelectedDocIds(new Set())}
+                  className="text-[10px] text-[var(--muted)] hover:text-[var(--accent)]"
+                >
+                  {t("reports.source.clear")}
+                </button>
+                <span className="ml-auto text-[10px] text-[var(--accent)] font-mono">
+                  {selectedDocIds.size} / {documents.length}
+                </span>
+              </div>
+            )}
+          </div>
+        )}
+
+        {threadsUsername && (
+          <label className="flex items-center gap-2 pt-3 border-t border-[var(--line)] cursor-pointer">
+            <input
+              type="checkbox"
+              name="includeThreads"
+              value="1"
+              checked={includeThreads}
+              onChange={(e) => setIncludeThreads(e.target.checked)}
+              className="accent-[var(--accent)]"
+            />
+            <span className="text-xs">
+              🧵 {t("reports.source.threads")} <span className="text-[var(--muted)]">@{threadsUsername}</span>
+            </span>
+          </label>
+        )}
       </div>
 
       <div>
