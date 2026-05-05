@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useState, useTransition } from "react";
+import { useActionState, useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import {
   saveBrandIdentity,
@@ -11,6 +11,18 @@ import {
   type AutoFillState,
   type AddCompetitorState,
 } from "./actions";
+
+type Toast = {
+  id: string;
+  kind: "running" | "ok" | "err";
+  text: string;
+};
+
+type ToastApi = {
+  push: (text: string, kind: "ok" | "err" | "running") => string;
+  update: (id: string, text: string, kind: "ok" | "err" | "running") => void;
+  dismiss: (id: string) => void;
+};
 
 type Identity = {
   name: string;
@@ -59,12 +71,69 @@ export function BrainView({
   const competitors = intelligence.filter((i) => i.category === "competitor");
   const others = intelligence.filter((i) => i.category !== "competitor");
 
+  const [toasts, setToasts] = useState<Toast[]>([]);
+  const toastApi: ToastApi = {
+    push: (text, kind) => {
+      const id = (typeof crypto !== "undefined" && crypto.randomUUID) ? crypto.randomUUID() : String(Date.now() + Math.random());
+      setToasts((prev) => [...prev, { id, text, kind }]);
+      if (kind !== "running") {
+        setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 4500);
+      }
+      return id;
+    },
+    update: (id, text, kind) => {
+      setToasts((prev) => prev.map((t) => (t.id === id ? { ...t, text, kind } : t)));
+      if (kind !== "running") {
+        setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 4500);
+      }
+    },
+    dismiss: (id) => setToasts((prev) => prev.filter((t) => t.id !== id)),
+  };
+
   return (
     <div className="space-y-10">
-      <BrandIdentitySection brandId={brandId} initial={identity} />
-      <CompetitorSection brandId={brandId} competitors={competitors} />
+      <BrandIdentitySection brandId={brandId} initial={identity} toast={toastApi} />
+      <CompetitorSection brandId={brandId} competitors={competitors} toast={toastApi} />
       {others.length > 0 && <OtherIntelligenceSection brandId={brandId} items={others} />}
       <WinningMemorySection winning={winning} />
+
+      {/* Toasts */}
+      <div className="fixed bottom-4 right-4 md:bottom-6 md:right-6 z-50 space-y-2 max-w-[360px] w-[calc(100vw-2rem)]">
+        {toasts.map((t) => (
+          <div
+            key={t.id}
+            style={{ animation: "toast-in 0.25s cubic-bezier(0.16, 1, 0.3, 1)" }}
+            className={`border bg-[var(--surface)] backdrop-blur-xl shadow-2xl ${
+              t.kind === "err"
+                ? "border-red-400/50"
+                : t.kind === "ok"
+                  ? "border-[var(--accent)]/50"
+                  : "border-[var(--line)]"
+            }`}
+          >
+            <div className="px-4 py-3 flex items-center gap-3">
+              <span
+                className={`w-2 h-2 rounded-full shrink-0 ${
+                  t.kind === "err" ? "bg-red-400" : t.kind === "ok" ? "bg-[var(--accent)]" : "bg-yellow-400"
+                }`}
+                style={t.kind === "running" ? { animation: "pulse-dot 1.4s ease-in-out infinite" } : undefined}
+              />
+              <div className="min-w-0 flex-1 text-xs leading-relaxed">
+                {t.kind === "err" ? "✕ " : t.kind === "ok" ? "✓ " : "↻ "}
+                {t.text}
+              </div>
+              <button
+                type="button"
+                onClick={() => toastApi.dismiss(t.id)}
+                className="text-[var(--muted)] hover:text-[var(--foreground)] text-sm shrink-0"
+                aria-label="dismiss"
+              >
+                ✕
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -74,9 +143,11 @@ export function BrainView({
 function BrandIdentitySection({
   brandId,
   initial,
+  toast,
 }: {
   brandId: string;
   initial: Identity;
+  toast: ToastApi;
 }) {
   const router = useRouter();
   const [positioning, setPositioning] = useState(initial.positioning);
@@ -94,6 +165,49 @@ function BrandIdentitySection({
   );
   const [showAuto, setShowAuto] = useState(false);
   const [autoUrl, setAutoUrl] = useState("");
+  const savePendingRef = useRef(false);
+  const autoPendingRef = useRef(false);
+  const saveToastRef = useRef<string | null>(null);
+  const autoToastRef = useRef<string | null>(null);
+
+  // Save brand identity: toast on pending → ok/err
+  useEffect(() => {
+    if (savePending && !savePendingRef.current) {
+      savePendingRef.current = true;
+      saveToastRef.current = toast.push("正在儲存 Brand Identity...", "running");
+    } else if (!savePending && savePendingRef.current && saveState) {
+      savePendingRef.current = false;
+      const tid = saveToastRef.current;
+      if (tid) {
+        if ("success" in saveState && saveState.success) {
+          toast.update(tid, "Brand Identity 已儲存（寫入 brands 表，下次 AI 生成自動讀取）", "ok");
+        } else if ("error" in saveState) {
+          toast.update(tid, `儲存失敗：${saveState.error}`, "err");
+        }
+      }
+      saveToastRef.current = null;
+    }
+  }, [savePending, saveState, toast]);
+
+  // Auto-fill: pending toast + clear URL on success
+  useEffect(() => {
+    if (autoPending && !autoPendingRef.current) {
+      autoPendingRef.current = true;
+      autoToastRef.current = toast.push("🌐 正在抓取網頁並 AI 分析...", "running");
+    } else if (!autoPending && autoPendingRef.current && autoState) {
+      autoPendingRef.current = false;
+      const tid = autoToastRef.current;
+      if (tid) {
+        if ("success" in autoState && autoState.success) {
+          const dataNote = autoState.savedToDataId ? "（原始內容已存入 DATA）" : "";
+          toast.update(tid, `分析完成${dataNote}，請按「✓ 套用到下方欄位」`, "ok");
+        } else if ("error" in autoState) {
+          toast.update(tid, `分析失敗：${autoState.error}`, "err");
+        }
+      }
+      autoToastRef.current = null;
+    }
+  }, [autoPending, autoState, toast]);
 
   function applyAutoResult() {
     if (!autoState || !("success" in autoState) || !autoState.success) return;
@@ -101,6 +215,9 @@ function BrandIdentitySection({
     setAudience(autoState.target_audience);
     setTone(autoState.tone_guide);
     setTaboo(autoState.taboo_words.join("、"));
+    setAutoUrl("");
+    setShowAuto(false);
+    toast.push("已套用到下方欄位，記得點「儲存 Brand Identity」", "ok");
   }
 
   return (
@@ -222,9 +339,21 @@ function BrandIdentitySection({
           placeholder="例：親切口語、年輕活潑、適度用 emoji、不過度推銷"
         />
         <div>
-          <label className="mb-1.5 block text-xs font-medium tracking-wide text-[var(--muted)]">
-            禁忌詞 (Taboo Words)
-          </label>
+          <div className="mb-1.5 flex items-center justify-between gap-2">
+            <label className="block text-xs font-medium tracking-wide text-[var(--muted)]">
+              禁忌詞 (Taboo Words)
+            </label>
+            {taboo && (
+              <button
+                type="button"
+                onClick={() => setTaboo("")}
+                className="text-[10px] text-[var(--muted)] hover:text-red-400 transition"
+                title="清空此欄"
+              >
+                ✕ 清空
+              </button>
+            )}
+          </div>
           <input
             name="taboo_words"
             type="text"
@@ -235,22 +364,22 @@ function BrandIdentitySection({
           />
         </div>
 
-        {saveState && "error" in saveState && (
-          <p className="text-xs text-red-400">{saveState.error}</p>
-        )}
-        {saveState && "success" in saveState && (
-          <p className="text-xs text-[var(--accent)]" onAnimationEnd={() => router.refresh()}>
-            ✓ 已儲存
-          </p>
-        )}
-
-        <button
-          type="submit"
-          disabled={savePending}
-          className="bg-[var(--accent)] px-5 py-2.5 text-xs font-bold tracking-wide text-[var(--background)] hover:bg-[var(--accent-glow)] transition disabled:opacity-50"
-        >
-          {savePending ? "儲存中..." : "儲存 Brand Identity"}
-        </button>
+        <div className="flex items-center gap-3 flex-wrap">
+          <button
+            type="submit"
+            disabled={savePending}
+            onClick={() => {
+              // Refresh page state after the save action settles
+              setTimeout(() => router.refresh(), 600);
+            }}
+            className="bg-[var(--accent)] px-5 py-2.5 text-xs font-bold tracking-wide text-[var(--background)] hover:bg-[var(--accent-glow)] transition disabled:opacity-50 inline-flex items-center gap-1.5"
+          >
+            {savePending ? <><span className="spinner" /> 儲存中</> : "💾 儲存 Brand Identity"}
+          </button>
+          <span className="text-[10px] text-[var(--muted)] font-mono">
+            儲存於 Supabase brands 表，AI 每次生成都會自動讀取此處設定
+          </span>
+        </div>
       </form>
     </section>
   );
@@ -273,9 +402,21 @@ function Field({
 }) {
   return (
     <div>
-      <label className="mb-1.5 block text-xs font-medium tracking-wide text-[var(--muted)]">
-        {label}
-      </label>
+      <div className="mb-1.5 flex items-center justify-between gap-2">
+        <label className="block text-xs font-medium tracking-wide text-[var(--muted)]">
+          {label}
+        </label>
+        {value && (
+          <button
+            type="button"
+            onClick={() => onChange("")}
+            className="text-[10px] text-[var(--muted)] hover:text-red-400 transition"
+            title="清空此欄"
+          >
+            ✕ 清空
+          </button>
+        )}
+      </div>
       <textarea
         name={name}
         rows={rows}
@@ -293,21 +434,53 @@ function Field({
 function CompetitorSection({
   brandId,
   competitors,
+  toast,
 }: {
   brandId: string;
   competitors: IntelligenceItem[];
+  toast: ToastApi;
 }) {
+  const router = useRouter();
   const [state, action, pending] = useActionState<AddCompetitorState, FormData>(
     addCompetitor,
     undefined
   );
   const [url, setUrl] = useState("");
   const [saveToData, setSaveToData] = useState(false);
+  const pendingRef = useRef(false);
+  const toastRef = useRef<string | null>(null);
 
-  // Clear input on success
-  if (state && "success" in state && state.success && url) {
-    setTimeout(() => setUrl(""), 0);
-  }
+  // Toast lifecycle
+  useEffect(() => {
+    if (pending && !pendingRef.current) {
+      pendingRef.current = true;
+      toastRef.current = toast.push(
+        "🌐 抓取競品網站 → AI 判斷相關性 → 摘要策略...",
+        "running"
+      );
+    } else if (!pending && pendingRef.current && state) {
+      pendingRef.current = false;
+      const tid = toastRef.current;
+      if (tid) {
+        if ("success" in state && state.success) {
+          const dataNote = state.savedToDataId ? "+ 原始內容已存入 DATA" : "";
+          toast.update(tid, `競品分析已加入 ${dataNote}`, "ok");
+          setUrl("");
+          setSaveToData(false);
+          setTimeout(() => router.refresh(), 300);
+        } else if ("irrelevant" in state && state.irrelevant) {
+          toast.update(
+            tid,
+            `AI 判斷不是競品（相關性 ${state.relevance_score}/10），請看下方說明`,
+            "err"
+          );
+        } else if ("error" in state) {
+          toast.update(tid, `分析失敗：${state.error}`, "err");
+        }
+      }
+      toastRef.current = null;
+    }
+  }, [pending, state, toast, router]);
 
   const irrelevant = state && "irrelevant" in state && state.irrelevant;
 
@@ -362,10 +535,6 @@ function CompetitorSection({
         </label>
       </form>
 
-      {state && "error" in state && (
-        <p className="text-xs text-red-400">{state.error}</p>
-      )}
-
       {irrelevant && (
         <div className="border border-yellow-400/40 bg-yellow-400/5 p-4 space-y-3">
           <div className="flex items-start gap-2">
@@ -400,12 +569,6 @@ function CompetitorSection({
             </button>
           </form>
         </div>
-      )}
-
-      {state && "success" in state && state.success && state.savedToDataId && (
-        <p className="text-xs text-[var(--accent)]">
-          ✓ 已加入競品分析，原始內容已存入 DATA 知識庫
-        </p>
       )}
 
       {competitors.length === 0 ? (
