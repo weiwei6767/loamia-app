@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { ThreadsConnectionWidget } from "./threads-connection-widget";
 
 type Activity = {
   id: string;
@@ -53,7 +54,7 @@ export default async function BrandHomePage({
     { count: postsSentToday },
     { count: contentToday },
     { count: repliesToday },
-    { count: connectionsCount },
+    { data: threadsConnection },
     { data: recentScheduled },
     { data: recentContent },
     { data: recentReplies },
@@ -86,8 +87,10 @@ export default async function BrandHomePage({
       .gte("created_at", todayIso),
     supabase
       .from("social_connections")
-      .select("id", { count: "exact", head: true })
-      .eq("brand_id", brand.id),
+      .select("username, token_expires_at, created_at")
+      .eq("brand_id", brand.id)
+      .eq("platform", "threads")
+      .maybeSingle(),
     supabase
       .from("scheduled_posts")
       .select("id, text, status, sent_at, scheduled_at, error_message, created_at")
@@ -270,10 +273,20 @@ export default async function BrandHomePage({
           />
           <ModuleStat label="📊 REPORTS" stat={`${reportsCount ?? 0} 份`} href={`/brand/${brand.id}/reports`} />
         </div>
-        <div className="mt-3 text-[10px] text-[var(--muted)] font-mono">
-          🧵 Threads 連接：{(connectionsCount ?? 0) > 0 ? "✓ 已連接" : "✕ 尚未連接"}
-        </div>
       </section>
+
+      <ThreadsConnectionWidget
+        brandId={brand.id}
+        connection={
+          threadsConnection
+            ? {
+                username: (threadsConnection.username as string | null) ?? null,
+                token_expires_at: (threadsConnection.token_expires_at as string | null) ?? null,
+                created_at: threadsConnection.created_at as string,
+              }
+            : null
+        }
+      />
     </div>
   );
 }
