@@ -2,7 +2,12 @@
 
 import { useActionState, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { generateReplies, deleteMonitorReply, type MonitorState } from "./actions";
+import {
+  generateReplies,
+  deleteMonitorReply,
+  postThreadsReply,
+  type MonitorState,
+} from "./actions";
 import { useI18n } from "@/lib/i18n/provider";
 import { ThreadsSection } from "./threads-section";
 
@@ -12,6 +17,7 @@ type MonitorRow = {
   source_type: string | null;
   tone: string | null;
   suggestions: string[];
+  threads_url: string | null;
   created_at: string;
 };
 
@@ -64,6 +70,7 @@ export function MonitorView({
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const sourceTextRef = useRef<HTMLTextAreaElement>(null);
   const sourceTypeRef = useRef<HTMLInputElement>(null);
+  const threadsUrlRef = useRef<HTMLInputElement>(null);
 
   // Show toast for OAuth connection result on mount
   useEffect(() => {
@@ -82,7 +89,7 @@ export function MonitorView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  function fillFromThreadsPost(post: { text?: string; username?: string }) {
+  function fillFromThreadsPost(post: { text?: string; username?: string; permalink?: string }) {
     if (sourceTextRef.current) {
       sourceTextRef.current.value = post.text ?? "";
       sourceTextRef.current.focus();
@@ -91,6 +98,9 @@ export function MonitorView({
       sourceTypeRef.current.value = post.username
         ? `Threads · @${post.username}`
         : "Threads 貼文";
+    }
+    if (threadsUrlRef.current && post.permalink) {
+      threadsUrlRef.current.value = post.permalink;
     }
     sourceTextRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
   }
@@ -211,6 +221,23 @@ export function MonitorView({
           </div>
         </div>
 
+        <div>
+          <label
+            htmlFor="threadsUrl"
+            className="mb-1.5 block text-xs font-medium tracking-wide text-[var(--muted)]"
+          >
+            Threads 貼文網址（選填，填了之後可直接從建議發送回覆）
+          </label>
+          <input
+            ref={threadsUrlRef}
+            id="threadsUrl"
+            name="threadsUrl"
+            type="url"
+            placeholder="https://www.threads.com/@xxx/post/..."
+            className="w-full border border-[var(--line)] bg-[var(--surface-2)] px-3 py-2 text-sm focus:border-[var(--accent)] focus:outline-none"
+          />
+        </div>
+
         {state && "error" in state && state.error && (
           <p className="text-sm text-red-400">{state.error}</p>
         )}
@@ -267,6 +294,7 @@ export function MonitorView({
                         key={row.id}
                         row={row}
                         brandId={brandId}
+                        connected={!!connection}
                         expanded={expandedId === row.id}
                         onToggle={() =>
                           setExpandedId((cur) => (cur === row.id ? null : row.id))
@@ -294,18 +322,42 @@ export function MonitorView({
 function ReplyCard({
   row,
   brandId,
+  connected,
   expanded,
   onToggle,
 }: {
   row: MonitorRow;
   brandId: string;
+  connected: boolean;
   expanded: boolean;
   onToggle: () => void;
 }) {
   const { t } = useI18n();
   const [pending, startTransition] = useTransition();
   const [active, setActive] = useState(0);
+  const [sendStatus, setSendStatus] = useState<"idle" | "sending" | "sent" | "error">("idle");
+  const [sendError, setSendError] = useState<string>("");
   const reply = row.suggestions[active] ?? "";
+  const canSendDirectly = connected && !!row.threads_url;
+
+  async function sendToThreads() {
+    if (!row.threads_url || !reply) return;
+    if (!confirm(`確定發送這則回覆到 Threads？\n\n${reply}`)) return;
+    setSendStatus("sending");
+    setSendError("");
+    const fd = new FormData();
+    fd.append("brandId", brandId);
+    fd.append("url", row.threads_url);
+    fd.append("text", reply);
+    const result = await postThreadsReply(undefined, fd);
+    if (result && "success" in result && result.success) {
+      setSendStatus("sent");
+      setTimeout(() => setSendStatus("idle"), 4000);
+    } else if (result && "error" in result) {
+      setSendStatus("error");
+      setSendError(result.error);
+    }
+  }
 
   return (
     <li
@@ -366,8 +418,40 @@ function ReplyCard({
           </div>
           <div className="p-4">
             <div className="text-sm leading-relaxed whitespace-pre-wrap mb-3">{reply}</div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <CopyButton text={reply} />
+              {canSendDirectly && (
+                <button
+                  type="button"
+                  disabled={sendStatus === "sending"}
+                  onClick={sendToThreads}
+                  className={`text-xs px-3 py-1.5 border transition disabled:opacity-50 ${
+                    sendStatus === "sent"
+                      ? "border-[var(--accent)] text-[var(--accent)]"
+                      : sendStatus === "error"
+                        ? "border-red-400 text-red-400"
+                        : "border-[var(--accent)] text-[var(--accent)] hover:bg-[var(--accent)] hover:text-[var(--background)]"
+                  }`}
+                >
+                  {sendStatus === "sending"
+                    ? "↻ 發送中..."
+                    : sendStatus === "sent"
+                      ? "✓ 已發送"
+                      : sendStatus === "error"
+                        ? "✕ 失敗，重試"
+                        : "📤 發送到 Threads"}
+                </button>
+              )}
+              {row.threads_url && (
+                <a
+                  href={row.threads_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs px-3 py-1.5 border border-[var(--line)] text-[var(--muted)] hover:text-[var(--foreground)] hover:border-[var(--accent)] transition"
+                >
+                  ↗ 原貼文
+                </a>
+              )}
               <button
                 type="button"
                 disabled={pending}
@@ -381,6 +465,9 @@ function ReplyCard({
                 ✕ {pending ? "..." : "刪除"}
               </button>
             </div>
+            {sendError && (
+              <p className="mt-2 text-xs text-red-400">{sendError}</p>
+            )}
           </div>
         </div>
       )}

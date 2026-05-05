@@ -18,6 +18,7 @@ export async function generateReplies(
   const sourceText = String(formData.get("sourceText") ?? "").trim();
   const sourceType = String(formData.get("sourceType") ?? "").trim();
   const tone = String(formData.get("tone") ?? "").trim();
+  const threadsUrl = String(formData.get("threadsUrl") ?? "").trim();
 
   if (!brandId) return { error: "missing brandId" };
   if (!sourceText) return { error: "請貼上要回覆的內容" };
@@ -51,6 +52,7 @@ export async function generateReplies(
       source_type: sourceType || null,
       tone: tone || null,
       suggestions,
+      threads_url: threadsUrl || null,
     })
     .select("id")
     .single();
