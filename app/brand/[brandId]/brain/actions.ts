@@ -9,6 +9,97 @@ import {
 } from "@/lib/ai/brand-analyzer";
 import { chunkText, buildChunkRows } from "@/lib/ai/ingest";
 
+async function upsertBrandIdentityDocument(
+  supabase: SupabaseClient,
+  brand: { id: string; agency_id: string; name: string },
+  identity: {
+    positioning: string | null;
+    target_audience: string | null;
+    tone_guide: string | null;
+    taboo_words: string[] | null;
+  }
+): Promise<void> {
+  const parts: string[] = [`# Brand Identity — ${brand.name}\n`];
+  if (identity.positioning) parts.push(`## 定位\n${identity.positioning}\n`);
+  if (identity.target_audience) parts.push(`## 目標受眾\n${identity.target_audience}\n`);
+  if (identity.tone_guide) parts.push(`## 語氣指南\n${identity.tone_guide}\n`);
+  if (identity.taboo_words && identity.taboo_words.length > 0) {
+    parts.push(`## 禁忌詞\n${identity.taboo_words.join("、")}\n`);
+  }
+  const content = parts.join("\n");
+
+  // Find existing brand_identity doc for this brand
+  const { data: existing } = await supabase
+    .from("documents")
+    .select("id, storage_path")
+    .eq("brand_id", brand.id)
+    .contains("tags", ["brand_identity"])
+    .limit(1)
+    .maybeSingle();
+
+  // If no actual content (all empty), delete existing doc
+  if (!identity.positioning && !identity.target_audience && !identity.tone_guide &&
+      (!identity.taboo_words || identity.taboo_words.length === 0)) {
+    if (existing?.id) {
+      if (existing.storage_path) {
+        await supabase.storage.from("documents").remove([existing.storage_path as string]);
+      }
+      await supabase.from("documents").delete().eq("id", existing.id);
+    }
+    return;
+  }
+
+  // Delete existing (so we can re-insert fresh, including chunks)
+  if (existing?.id) {
+    if (existing.storage_path) {
+      await supabase.storage.from("documents").remove([existing.storage_path as string]);
+    }
+    await supabase.from("documents").delete().eq("id", existing.id);
+  }
+
+  // Upload new
+  const buffer = Buffer.from(content, "utf-8");
+  const storagePath = `${brand.agency_id}/${brand.id}/${Date.now()}-${crypto.randomUUID()}.txt`;
+  const { error: uploadErr } = await supabase.storage
+    .from("documents")
+    .upload(storagePath, buffer, { contentType: "text/plain", upsert: false });
+  if (uploadErr) return;
+
+  const { data: doc } = await supabase
+    .from("documents")
+    .insert({
+      brand_id: brand.id,
+      agency_id: brand.agency_id,
+      filename: `Brand Identity（${brand.name}）.txt`,
+      storage_path: storagePath,
+      mime_type: "text/plain",
+      byte_size: buffer.length,
+      status: "processing",
+      progress_pct: 30,
+      tags: ["brand_identity", "system"],
+    })
+    .select("id")
+    .single();
+  if (!doc) return;
+
+  try {
+    const chunks = chunkText(content);
+    const rows = await buildChunkRows(chunks, doc.id, brand.id, brand.agency_id);
+    if (rows.length > 0) {
+      await supabase.from("document_chunks").insert(rows);
+    }
+    await supabase
+      .from("documents")
+      .update({ status: "ready", progress_pct: 100 })
+      .eq("id", doc.id);
+  } catch {
+    await supabase
+      .from("documents")
+      .update({ status: "error", progress_pct: 0 })
+      .eq("id", doc.id);
+  }
+}
+
 async function saveFetchedContentAsDocument(
   supabase: SupabaseClient,
   brand: { id: string; agency_id: string },
@@ -105,6 +196,13 @@ export async function saveBrandIdentity(
     : [];
 
   const supabase = await createClient();
+  const { data: brand } = await supabase
+    .from("brands")
+    .select("id, name, agency_id")
+    .eq("id", brandId)
+    .single();
+  if (!brand) return { error: "品牌不存在" };
+
   const { error } = await supabase
     .from("brands")
     .update({
@@ -116,7 +214,20 @@ export async function saveBrandIdentity(
     .eq("id", brandId);
   if (error) return { error: error.message };
 
+  // Mirror to DATA so user can see + RAG can use
+  await upsertBrandIdentityDocument(
+    supabase,
+    { id: brand.id as string, agency_id: brand.agency_id as string, name: brand.name as string },
+    {
+      positioning: positioning || null,
+      target_audience: target_audience || null,
+      tone_guide: tone_guide || null,
+      taboo_words: taboo_words.length > 0 ? taboo_words : null,
+    }
+  );
+
   revalidatePath(`/brand/${brandId}/brain`);
+  revalidatePath(`/brand/${brandId}/data`);
   return { success: true };
 }
 

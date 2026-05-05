@@ -409,21 +409,8 @@ function BrandIdentitySection({
           {!isDirty && !savePending && (positioning || audience || tone || taboo) && (
             <span className="text-xs text-[var(--accent)] font-mono">✓ 已儲存</span>
           )}
-          <button
-            type="button"
-            onClick={() => {
-              if (!confirm("確定清空所有欄位？（不會影響資料庫已儲存的設定，按儲存才會覆寫）")) return;
-              setPositioning("");
-              setAudience("");
-              setTone("");
-              setTaboo("");
-            }}
-            className="text-xs px-3 py-2.5 border border-[var(--line)] text-[var(--muted)] hover:border-red-400 hover:text-red-400 transition"
-          >
-            ✕ 全部清空
-          </button>
           <span className="text-[10px] text-[var(--muted)] font-mono">
-            儲存於 Supabase brands 表，AI 每次生成都會自動讀取此處設定
+            儲存於 brands 表 + 同步到 DATA「自動爬取」區塊
           </span>
         </div>
       </form>

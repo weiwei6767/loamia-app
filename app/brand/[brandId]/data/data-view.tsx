@@ -61,7 +61,8 @@ export function DataView({ brandId, documents }: { brandId: string; documents: D
   };
 
   function isAutoFetched(d: Doc): boolean {
-    return (d.tags ?? []).includes("auto-fetched");
+    const tags = d.tags ?? [];
+    return tags.includes("auto-fetched") || tags.includes("system") || tags.includes("brand_identity");
   }
 
   const allTags = Array.from(
@@ -403,7 +404,7 @@ export function DataView({ brandId, documents }: { brandId: string; documents: D
                 )}
                 {autoDocs.length > 0 && (
                   <DocSection
-                    title="🤖 自動爬取（BRAIN 分析來源）"
+                    title="🤖 BRAIN 同步（系統產生 / 自動爬取）"
                     count={autoDocs.length}
                     docs={autoDocs}
                     brandId={brandId}
