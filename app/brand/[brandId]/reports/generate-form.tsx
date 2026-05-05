@@ -15,6 +15,7 @@ import {
 } from "./actions";
 import { useI18n } from "@/lib/i18n/provider";
 import { Uploader } from "../uploader";
+import { deleteDocument } from "../actions";
 import { STYLES, STYLE_KEYS, type StyleKey } from "@/lib/ai/styles";
 
 const SECTION_TEMPLATES: Record<string, { zh: string; en: string }> = {
@@ -92,6 +93,7 @@ export function GenerateForm({
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [dataSource, setDataSource] = useState<"auto" | "select">("auto");
   const [selectedDocIds, setSelectedDocIds] = useState<Set<string>>(new Set());
+  const initialDocIdsRef = useRef<Set<string>>(new Set(documents.map((d) => d.id)));
   const router = useRouter();
 
   function toggleDoc(id: string) {
@@ -101,6 +103,17 @@ export function GenerateForm({
       else next.add(id);
       return next;
     });
+  }
+
+  async function handleRemoveSessionUpload(docId: string, filename: string) {
+    if (!confirm(t("reports.source.delete_session.confirm").replace("{name}", filename))) return;
+    await deleteDocument(docId, brandId);
+    setSelectedDocIds((prev) => {
+      const next = new Set(prev);
+      next.delete(docId);
+      return next;
+    });
+    router.refresh();
   }
 
   // Vision upload (inline, between style picker and generate button)
@@ -290,27 +303,49 @@ export function GenerateForm({
             {documents.length === 0 ? (
               <p className="text-xs text-[var(--muted)]">{t("reports.source.no_docs")}</p>
             ) : (
-              documents.map((d) => (
-                <label
-                  key={d.id}
-                  className="flex items-start gap-2 px-2 py-1.5 hover:bg-[var(--surface)] cursor-pointer transition"
-                >
-                  <input
-                    type="checkbox"
-                    name="docId"
-                    value={d.id}
-                    checked={selectedDocIds.has(d.id)}
-                    onChange={() => toggleDoc(d.id)}
-                    className="mt-0.5 accent-[var(--accent)]"
-                  />
-                  <div className="flex-1 min-w-0">
-                    <div className="text-xs truncate">{d.filename}</div>
-                    {d.period && (
-                      <div className="text-[10px] text-[var(--muted)] font-mono">· {d.period}</div>
+              documents.map((d) => {
+                const isSessionUpload = !initialDocIdsRef.current.has(d.id);
+                return (
+                  <div
+                    key={d.id}
+                    className="flex items-start gap-2 px-2 py-1.5 hover:bg-[var(--surface)] transition group"
+                  >
+                    <label className="flex items-start gap-2 flex-1 min-w-0 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        name="docId"
+                        value={d.id}
+                        checked={selectedDocIds.has(d.id)}
+                        onChange={() => toggleDoc(d.id)}
+                        className="mt-0.5 accent-[var(--accent)]"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <div className="text-xs truncate flex items-center gap-1.5">
+                          {d.filename}
+                          {isSessionUpload && (
+                            <span className="shrink-0 text-[9px] px-1 py-0.5 bg-[var(--accent)]/20 text-[var(--accent)] font-mono">
+                              {t("reports.source.new")}
+                            </span>
+                          )}
+                        </div>
+                        {d.period && (
+                          <div className="text-[10px] text-[var(--muted)] font-mono">· {d.period}</div>
+                        )}
+                      </div>
+                    </label>
+                    {isSessionUpload && (
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveSessionUpload(d.id, d.filename)}
+                        className="shrink-0 text-[10px] text-[var(--muted)] hover:text-red-400 transition opacity-0 group-hover:opacity-100"
+                        title={t("reports.source.delete_session.title")}
+                      >
+                        ✕
+                      </button>
                     )}
                   </div>
-                </label>
-              ))
+                );
+              })
             )}
             {documents.length > 0 && (
               <div className="flex items-center gap-2 pt-2 border-t border-[var(--line)]">
@@ -327,7 +362,7 @@ export function GenerateForm({
                   onClick={() => setSelectedDocIds(new Set())}
                   className="text-[10px] text-[var(--muted)] hover:text-[var(--accent)]"
                 >
-                  {t("reports.source.clear")}
+                  {t("reports.source.deselect_all")}
                 </button>
                 <span className="ml-auto text-[10px] text-[var(--accent)] font-mono">
                   {selectedDocIds.size} / {documents.length}
