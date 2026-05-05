@@ -46,7 +46,7 @@ export async function GET(req: NextRequest) {
 
     const expiresAt = new Date(Date.now() + longToken.expires_in * 1000).toISOString();
 
-    await supabase
+    const { error: upsertErr } = await supabase
       .from("social_connections")
       .upsert(
         {
@@ -62,6 +62,9 @@ export async function GET(req: NextRequest) {
         },
         { onConflict: "brand_id,platform" }
       );
+    if (upsertErr) {
+      throw new Error(`db upsert failed: ${upsertErr.message}`);
+    }
 
     return NextResponse.redirect(
       new URL(`/brand/${brandId}/monitor?threads_connected=1`, req.url)
