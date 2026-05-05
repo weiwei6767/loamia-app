@@ -4,6 +4,7 @@ import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { uploadDocument } from "./actions";
 import { useI18n } from "@/lib/i18n/provider";
+import { UploadProgressList } from "./upload-progress";
 
 export function InlineUploader({ brandId }: { brandId: string }) {
   const { t } = useI18n();
@@ -78,6 +79,7 @@ export function InlineUploader({ brandId }: { brandId: string }) {
           {msg.text}
         </p>
       )}
+      <UploadProgressList brandId={brandId} />
     </div>
   );
 }

@@ -3,6 +3,7 @@
 import { useActionState, useRef, useEffect } from "react";
 import { uploadDocument, type UploadState } from "./actions";
 import { useI18n } from "@/lib/i18n/provider";
+import { UploadProgressList } from "./upload-progress";
 
 export function Uploader({ brandId }: { brandId: string }) {
   const { t } = useI18n();
@@ -37,6 +38,7 @@ export function Uploader({ brandId }: { brandId: string }) {
       {state?.error && <p className="text-xs text-red-400 whitespace-pre-wrap">{state.error}</p>}
       {state?.success && <p className="text-xs text-[var(--accent)]">{state.success}</p>}
       <p className="text-xs text-[var(--muted)]">{t("brand.upload.help")}</p>
+      <UploadProgressList brandId={brandId} />
     </form>
   );
 }

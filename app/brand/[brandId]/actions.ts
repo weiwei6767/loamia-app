@@ -35,29 +35,41 @@ async function ingestSingleFile(
       mime_type: file.type,
       byte_size: file.size,
       status: "processing",
+      progress_pct: 5,
     })
     .select()
     .single();
   if (docErr || !doc) return { ok: false, filename: file.name, error: docErr?.message ?? "建立 document 失敗" };
 
+  const setProgress = async (pct: number) => {
+    await supabase.from("documents").update({ progress_pct: pct }).eq("id", doc.id);
+  };
+
   try {
     console.log(`[ingest] start ${file.name} (${file.size}B, ${file.type})`);
+    await setProgress(15);
     const text = await extractText({ buffer, mimeType: file.type, filename: file.name });
     console.log(`[ingest] extracted ${text.length} chars`);
     if (!text.trim()) throw new Error("檔案沒有可讀文字");
+    await setProgress(35);
 
     const chunks = chunkText(text);
     console.log(`[ingest] chunked into ${chunks.length} pieces`);
+    await setProgress(50);
 
     const rows = await buildChunkRows(chunks, doc.id, brand.id, brand.agency_id);
     console.log(`[ingest] embedded ${rows.length} chunks`);
+    await setProgress(90);
 
     if (rows.length > 0) {
       const { error: chunkErr } = await supabase.from("document_chunks").insert(rows);
       if (chunkErr) throw new Error(`DB insert: ${chunkErr.message}`);
     }
 
-    await supabase.from("documents").update({ status: "ready" }).eq("id", doc.id);
+    await supabase
+      .from("documents")
+      .update({ status: "ready", progress_pct: 100 })
+      .eq("id", doc.id);
     console.log(`[ingest] done ${file.name}`);
     return { ok: true, filename: file.name };
   } catch (err) {
@@ -65,7 +77,7 @@ async function ingestSingleFile(
     const msg = err instanceof Error ? err.message : "ingest 失敗";
     await supabase
       .from("documents")
-      .update({ status: "error", error_message: msg })
+      .update({ status: "error", error_message: msg, progress_pct: 0 })
       .eq("id", doc.id);
     return { ok: false, filename: file.name, error: msg };
   }

@@ -11,6 +11,7 @@ import {
   type AutoFillState,
   type AddCompetitorState,
 } from "./actions";
+import { UploadProgressList } from "../upload-progress";
 
 type Toast = {
   id: string;
@@ -94,6 +95,7 @@ export function BrainView({
     <div className="space-y-10">
       <BrandIdentitySection brandId={brandId} initial={identity} toast={toastApi} />
       <CompetitorSection brandId={brandId} competitors={competitors} toast={toastApi} />
+      <UploadProgressList brandId={brandId} />
       {others.length > 0 && <OtherIntelligenceSection brandId={brandId} items={others} />}
       <WinningMemorySection winning={winning} />
 

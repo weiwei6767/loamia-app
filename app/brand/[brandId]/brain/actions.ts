@@ -45,6 +45,7 @@ async function saveFetchedContentAsDocument(
       mime_type: "text/plain",
       byte_size: buffer.length,
       status: "processing",
+      progress_pct: 30,
       tags: params.tags,
     })
     .select("id")
@@ -54,20 +55,29 @@ async function saveFetchedContentAsDocument(
     return { ok: false, error: docErr?.message ?? "建立文件失敗" };
   }
 
+  const setProgress = async (pct: number) => {
+    await supabase.from("documents").update({ progress_pct: pct }).eq("id", doc.id);
+  };
+
   try {
     const chunks = chunkText(params.text);
+    await setProgress(50);
     const rows = await buildChunkRows(chunks, doc.id, brand.id, brand.agency_id);
+    await setProgress(90);
     if (rows.length > 0) {
       const { error: chunkErr } = await supabase.from("document_chunks").insert(rows);
       if (chunkErr) throw new Error(chunkErr.message);
     }
-    await supabase.from("documents").update({ status: "ready" }).eq("id", doc.id);
+    await supabase
+      .from("documents")
+      .update({ status: "ready", progress_pct: 100 })
+      .eq("id", doc.id);
     return { ok: true, documentId: doc.id as string };
   } catch (err) {
     const msg = err instanceof Error ? err.message : "embedding 失敗";
     await supabase
       .from("documents")
-      .update({ status: "error", error_message: msg })
+      .update({ status: "error", error_message: msg, progress_pct: 0 })
       .eq("id", doc.id);
     return { ok: false, error: msg };
   }
