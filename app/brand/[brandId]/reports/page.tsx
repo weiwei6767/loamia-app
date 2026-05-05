@@ -29,7 +29,6 @@ export default async function ReportsPage({
     { data: sectionPresets },
     { data: customStyles },
     { data: docs },
-    { data: threadsConn },
   ] = await Promise.all([
     supabase
       .from("brand_reports")
@@ -54,12 +53,6 @@ export default async function ReportsPage({
       .eq("brand_id", brand.id)
       .eq("status", "ready")
       .order("created_at", { ascending: false }),
-    supabase
-      .from("social_connections")
-      .select("username")
-      .eq("brand_id", brand.id)
-      .eq("platform", "threads")
-      .maybeSingle(),
   ]);
 
   const t = await getServerT();
@@ -142,7 +135,6 @@ export default async function ReportsPage({
             filename: d.filename as string,
             period: (d.period as string | null) ?? null,
           }))}
-          threadsUsername={threadsConn?.username as string | null ?? null}
         />
 
         <div className="mt-12">

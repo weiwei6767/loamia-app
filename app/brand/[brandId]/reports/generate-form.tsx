@@ -64,14 +64,12 @@ export function GenerateForm({
   sectionPresets,
   customStyles,
   documents,
-  threadsUsername,
 }: {
   brandId: string;
   templates: SavedTemplate[];
   sectionPresets: SectionPreset[];
   customStyles: CustomStyleRow[];
   documents: { id: string; filename: string; period: string | null }[];
-  threadsUsername: string | null;
 }) {
   const { t, locale } = useI18n();
   const [state, action, pending] = useActionState<GenerateState, FormData>(generateReport, undefined);
@@ -94,7 +92,6 @@ export function GenerateForm({
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [dataSource, setDataSource] = useState<"auto" | "select">("auto");
   const [selectedDocIds, setSelectedDocIds] = useState<Set<string>>(new Set());
-  const [includeThreads, setIncludeThreads] = useState(false);
   const router = useRouter();
 
   function toggleDoc(id: string) {
@@ -340,20 +337,16 @@ export function GenerateForm({
           </div>
         )}
 
-        {threadsUsername && (
-          <label className="flex items-center gap-2 pt-3 border-t border-[var(--line)] cursor-pointer">
-            <input
-              type="checkbox"
-              name="includeThreads"
-              value="1"
-              checked={includeThreads}
-              onChange={(e) => setIncludeThreads(e.target.checked)}
-              className="accent-[var(--accent)]"
-            />
-            <span className="text-xs">
-              🧵 {t("reports.source.threads")} <span className="text-[var(--muted)]">@{threadsUsername}</span>
-            </span>
-          </label>
+        {dataSource === "select" && (
+          <div className="pt-3 border-t border-[var(--line)] space-y-2">
+            <div className="text-xs font-mono tracking-widest text-[var(--muted)]">
+              + {t("reports.source.upload_more")}
+            </div>
+            <Uploader brandId={brandId} />
+            <p className="text-[10px] text-[var(--muted)] leading-relaxed">
+              {t("reports.source.upload_hint")}
+            </p>
+          </div>
         )}
       </div>
 

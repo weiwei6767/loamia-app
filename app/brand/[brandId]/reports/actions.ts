@@ -20,7 +20,6 @@ import {
 import { isValidStyle, type StyleKey } from "@/lib/ai/styles";
 import { analyzeStyleFromImage } from "@/lib/ai/vision";
 import { sanitizeReportHtml } from "@/lib/sanitize";
-import { listMyThreads } from "@/lib/threads/api";
 
 export type GenerateState =
   | undefined
@@ -74,7 +73,6 @@ export async function generateReport(
   const selectedDocIds = formData.getAll("docId").map(String).filter(Boolean);
   const period = String(formData.get("period") ?? "").trim();
   const customStyleId = String(formData.get("customStyleId") ?? "").trim();
-  const includeThreads = String(formData.get("includeThreads") ?? "") === "1";
   if (!brandId) return { error: "missing brandId" };
 
   const opts = parseOptions(formData);
@@ -141,7 +139,7 @@ export async function generateReport(
       );
     } else {
       chunks = await retrieveRelevantChunks(brand.id, opts.focus, opts.lang, 50);
-      if (!isRelevant(chunks) && !includeThreads) {
+      if (!isRelevant(chunks)) {
         const { data: docs } = await supabase
           .from("documents")
           .select("id, filename, tags, period")
@@ -170,41 +168,6 @@ export async function generateReport(
     }
   } catch (err) {
     return { error: err instanceof Error ? err.message : "查詢失敗" };
-  }
-
-  if (includeThreads) {
-    const { data: conn } = await supabase
-      .from("social_connections")
-      .select("access_token, platform_user_id, username")
-      .eq("brand_id", brand.id)
-      .eq("platform", "threads")
-      .single();
-    if (conn?.access_token && conn?.platform_user_id) {
-      try {
-        const posts = await listMyThreads(
-          conn.platform_user_id as string,
-          conn.access_token as string,
-          25
-        );
-        const username = (conn.username as string | null) ?? "unknown";
-        const threadsChunks = posts
-          .filter((p) => p.text)
-          .map((p, i) => ({
-            id: `threads-${i}`,
-            document_id: "threads-platform",
-            filename: `Threads · @${username}`,
-            content: `【@${username} 於 ${p.timestamp ?? "未知時間"}】${p.text ?? ""}${p.permalink ? `\n原文：${p.permalink}` : ""}`,
-            similarity: 1,
-          }));
-        chunks = [...(chunks ?? []), ...threadsChunks];
-      } catch {
-        // platform fetch failed — proceed without threads data
-      }
-    }
-  }
-
-  if (!chunks || chunks.length === 0) {
-    return { error: "no_data" };
   }
 
   let content: string;
