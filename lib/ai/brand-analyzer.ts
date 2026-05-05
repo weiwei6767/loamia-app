@@ -11,6 +11,9 @@ export type BrandIdentityAnalysis = {
 };
 
 export type CompetitorAnalysis = {
+  relevance_score: number;
+  relevance_reason: string;
+  is_competitor: boolean;
   title: string;
   content: string;
 };
@@ -27,7 +30,7 @@ function safeJsonExtract(raw: string): unknown {
 
 export async function analyzeBrandIdentityFromUrl(
   url: string
-): Promise<BrandIdentityAnalysis> {
+): Promise<BrandIdentityAnalysis & { fetchedText: string; pageTitle: string }> {
   const page = await fetchPage(url);
   if (!page.text || page.text.length < 50) {
     throw new Error("page_too_short — 抓不到足夠內容（可能是 JS-rendered 網站）");
@@ -95,35 +98,54 @@ ${page.text}
     taboo_words: Array.isArray(obj.taboo_words)
       ? obj.taboo_words.filter((w) => typeof w === "string").slice(0, 10)
       : [],
+    fetchedText: page.text,
+    pageTitle: page.title,
   };
 }
 
 export async function analyzeCompetitorFromUrl(
   url: string,
   brandName: string,
-  brandPositioning: string | null
-): Promise<CompetitorAnalysis> {
+  brandPositioning: string | null,
+  brandTargetAudience: string | null
+): Promise<CompetitorAnalysis & { fetchedText: string; pageTitle: string }> {
   const page = await fetchPage(url);
   if (!page.text || page.text.length < 50) {
     throw new Error("page_too_short — 抓不到足夠內容");
   }
 
-  const systemPrompt = `你是 Loamia 的競品分析師。根據提供的競品內容，輸出**嚴格的 JSON**，總結該競品對「${brandName}」的競爭意義。
+  const systemPrompt = `你是 Loamia 的競品分析師。先判斷對方是否真的是我們的競品，再決定是否進行分析。
 
 ## 我們的品牌
-${brandName}${brandPositioning ? `\n定位：${brandPositioning}` : ""}
+- 名稱：${brandName}
+${brandPositioning ? `- 定位：${brandPositioning}\n` : ""}${brandTargetAudience ? `- 目標受眾：${brandTargetAudience}\n` : ""}
 
-## 輸出 JSON schema
+## 競品判斷標準（嚴格！）
+真正的競品須**滿足至少兩項**：
+1. 同產業 / 同類別產品或服務
+2. 目標受眾明顯重疊（不是「同樣是人」這種泛化）
+3. 在使用者心中是替代選項（消費者真的會在這兩個品牌間做選擇）
+
+**反例（必須拒絕）**：
+- 我是手搖飲品牌、對方是科技公司 → 不相關
+- 我是 SaaS、對方是餐廳 → 不相關
+- 雙方雖在同國家但行業差太遠 → 不相關
+- 對方是供應商或合作對象、不是替代品 → 不相關
+
+## 輸出（嚴格 JSON，所有欄位必填）
 {
-  "title": string,    // 30-60 字標題，點出競品最關鍵特徵（例：「競品X主打速度與低價，目標小資族」）
-  "content": string   // 200-400 字摘要，涵蓋：(1) 競品定位 / 主打訴求 (2) 內容語氣 (3) 近期動作或話題 (4) 對「${brandName}」的差異化機會
+  "relevance_score": number,        // 1-10，1=完全不相關，10=直接競爭
+  "relevance_reason": string,       // 50-150 字，說明判斷依據（產業、受眾、替代性）
+  "is_competitor": boolean,         // relevance_score >= 5 才為 true
+  "title": string,                  // is_competitor=true 時：30-60 字摘要；false 時填「不相關 — [簡短理由]」
+  "content": string                 // is_competitor=true 時：200-400 字策略摘要 + 差異化建議；false 時填「無關於本品牌的可行分析」
 }
 
 ## 規則
 1. **只輸出 JSON 物件**，不要 \`\`\`json 包覆、不要前言後語
 2. 用繁體中文
-3. 重點是「對我們有什麼意義」，不只是描述競品本身
-4. content 結尾必須有一句「差異化建議」或「我們可切入的機會」`;
+3. 寧可保守拒絕也不要硬找關聯——使用者最不滿的就是「明明不相關 AI 還硬分析」
+4. content（當 is_competitor=true 時）結尾必須一句「差異化建議」或「我們可切入的機會」`;
 
   const userMessage = `## 競品網址
 ${page.url}
@@ -142,7 +164,7 @@ ${page.text}
   const client = await anthropic();
   const stream = client.messages.stream({
     model: CHAT_MODEL,
-    max_tokens: 1200,
+    max_tokens: 1500,
     system: systemPrompt,
     messages: [{ role: "user", content: userMessage }],
   });
@@ -162,7 +184,12 @@ ${page.text}
   }
   const obj = parsed as Partial<CompetitorAnalysis>;
   return {
+    relevance_score: typeof obj.relevance_score === "number" ? obj.relevance_score : 5,
+    relevance_reason: typeof obj.relevance_reason === "string" ? obj.relevance_reason : "",
+    is_competitor: typeof obj.is_competitor === "boolean" ? obj.is_competitor : true,
     title: typeof obj.title === "string" ? obj.title : "競品分析",
     content: typeof obj.content === "string" ? obj.content : "",
+    fetchedText: page.text,
+    pageTitle: page.title,
   };
 }

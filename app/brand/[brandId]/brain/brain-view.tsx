@@ -126,6 +126,7 @@ function BrandIdentitySection({
           <p className="text-xs text-[var(--muted)] leading-relaxed">
             貼上品牌官網連結，AI 會抓內容並自動填入下方四個欄位。你可以再手動微調。
           </p>
+          <input type="hidden" name="brandId" value={brandId} />
           <div className="flex gap-2 flex-wrap">
             <input
               name="url"
@@ -150,12 +151,23 @@ function BrandIdentitySection({
               )}
             </button>
           </div>
+          <label className="flex items-center gap-2 text-xs text-[var(--muted)] cursor-pointer">
+            <input
+              type="checkbox"
+              name="saveToData"
+              value="1"
+              className="accent-[var(--accent)]"
+            />
+            <span>同時保存原始抓取內容到 DATA 知識庫（標籤：brand_identity / auto-fetched）</span>
+          </label>
           {autoState && "error" in autoState && (
             <p className="text-xs text-red-400">{autoState.error}</p>
           )}
           {autoState && "success" in autoState && autoState.success && (
             <div className="space-y-2 border border-[var(--accent)]/40 bg-[var(--accent)]/5 p-3">
-              <p className="text-xs text-[var(--accent)] font-mono">✓ 分析完成，預覽：</p>
+              <p className="text-xs text-[var(--accent)] font-mono">
+                ✓ 分析完成{autoState.savedToDataId ? "（已存入 DATA）" : ""}，預覽：
+              </p>
               <div className="text-xs space-y-1.5">
                 {autoState.brand_name && (
                   <div><span className="text-[var(--muted)]">品牌：</span>{autoState.brand_name}</div>
@@ -290,11 +302,14 @@ function CompetitorSection({
     undefined
   );
   const [url, setUrl] = useState("");
+  const [saveToData, setSaveToData] = useState(false);
 
   // Clear input on success
   if (state && "success" in state && state.success && url) {
     setTimeout(() => setUrl(""), 0);
   }
+
+  const irrelevant = state && "irrelevant" in state && state.irrelevant;
 
   return (
     <section className="border border-[var(--line)] bg-[var(--surface)] p-5 space-y-4">
@@ -304,37 +319,93 @@ function CompetitorSection({
         </div>
         <h3 className="mt-1 text-lg font-bold">外部世界 · 競品</h3>
         <p className="mt-1 text-xs text-[var(--muted)]">
-          貼上競品官網/IG/Threads，AI 自動摘要其策略 + 找出差異化機會。每次生成內容會自動參考。
+          貼上競品官網/IG/Threads，AI 會先判斷是否真的是你的競品（防止亂分析），然後摘要策略 + 找出差異化機會。
         </p>
       </div>
 
-      <form action={action} className="flex gap-2 flex-wrap">
+      <form action={action} className="space-y-2">
         <input type="hidden" name="brandId" value={brandId} />
-        <input
-          name="url"
-          type="url"
-          required
-          value={url}
-          onChange={(e) => setUrl(e.target.value)}
-          placeholder="https://competitor-brand.com"
-          className="flex-1 min-w-[200px] border border-[var(--line)] bg-[var(--surface-2)] px-3 py-2 text-sm focus:border-[var(--accent)] focus:outline-none"
-        />
-        <button
-          type="submit"
-          disabled={pending}
-          className="bg-[var(--accent)] px-4 py-2 text-xs font-bold tracking-wide text-[var(--background)] hover:bg-[var(--accent-glow)] transition disabled:opacity-50 inline-flex items-center gap-1.5"
-        >
-          {pending ? (
-            <>
-              <span className="spinner" /> 分析中
-            </>
-          ) : (
-            "+ 新增競品"
-          )}
-        </button>
+        <div className="flex gap-2 flex-wrap">
+          <input
+            name="url"
+            type="url"
+            required
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+            placeholder="https://competitor-brand.com"
+            className="flex-1 min-w-[200px] border border-[var(--line)] bg-[var(--surface-2)] px-3 py-2 text-sm focus:border-[var(--accent)] focus:outline-none"
+          />
+          <button
+            type="submit"
+            disabled={pending}
+            className="bg-[var(--accent)] px-4 py-2 text-xs font-bold tracking-wide text-[var(--background)] hover:bg-[var(--accent-glow)] transition disabled:opacity-50 inline-flex items-center gap-1.5"
+          >
+            {pending ? (
+              <>
+                <span className="spinner" /> 分析中
+              </>
+            ) : (
+              "+ 新增競品"
+            )}
+          </button>
+        </div>
+        <label className="flex items-center gap-2 text-xs text-[var(--muted)] cursor-pointer">
+          <input
+            type="checkbox"
+            name="saveToData"
+            value="1"
+            checked={saveToData}
+            onChange={(e) => setSaveToData(e.target.checked)}
+            className="accent-[var(--accent)]"
+          />
+          <span>同時保存原始抓取內容到 DATA 知識庫（標籤：competitor / auto-fetched）</span>
+        </label>
       </form>
+
       {state && "error" in state && (
         <p className="text-xs text-red-400">{state.error}</p>
+      )}
+
+      {irrelevant && (
+        <div className="border border-yellow-400/40 bg-yellow-400/5 p-4 space-y-3">
+          <div className="flex items-start gap-2">
+            <span className="text-xl shrink-0">⚠️</span>
+            <div className="min-w-0 flex-1">
+              <div className="text-sm font-bold text-yellow-300">
+                AI 判斷這似乎不是你的競品
+              </div>
+              <div className="text-[10px] text-[var(--muted)] font-mono mt-0.5">
+                相關性 {state.relevance_score}/10
+              </div>
+            </div>
+          </div>
+          <div className="text-xs leading-relaxed text-[var(--foreground)]/85">
+            <span className="text-[var(--muted)]">AI 判斷理由：</span>
+            {state.relevance_reason}
+          </div>
+          <div className="text-xs text-[var(--muted)]">
+            如果你確定這是相關競品（例如剛起步的小眾品牌、AI 沒抓到關係），可強制加入：
+          </div>
+          <form action={action} className="flex gap-2 flex-wrap">
+            <input type="hidden" name="brandId" value={brandId} />
+            <input type="hidden" name="url" value={state.url} />
+            <input type="hidden" name="force" value="1" />
+            {state.saveToData && <input type="hidden" name="saveToData" value="1" />}
+            <button
+              type="submit"
+              disabled={pending}
+              className="text-xs px-3 py-1.5 border border-yellow-400 text-yellow-300 hover:bg-yellow-400/20 transition"
+            >
+              {pending ? "處理中..." : "強制加入（我確定有相關）"}
+            </button>
+          </form>
+        </div>
+      )}
+
+      {state && "success" in state && state.success && state.savedToDataId && (
+        <p className="text-xs text-[var(--accent)]">
+          ✓ 已加入競品分析，原始內容已存入 DATA 知識庫
+        </p>
       )}
 
       {competitors.length === 0 ? (
