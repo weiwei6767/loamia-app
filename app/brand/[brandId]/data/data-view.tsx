@@ -412,6 +412,7 @@ export function DataView({ brandId, documents }: { brandId: string; documents: D
                     handleDelete={handleDelete}
                     t={t}
                     collapsible
+                    defaultCollapsed={autoDocs.length > 3}
                   />
                 )}
               </>
@@ -440,6 +441,7 @@ function DocSection({
   handleDelete,
   t,
   collapsible = false,
+  defaultCollapsed,
 }: {
   title: string;
   count: number;
@@ -450,8 +452,9 @@ function DocSection({
   handleDelete: (id: string) => void;
   t: ReturnType<typeof useI18n>["t"];
   collapsible?: boolean;
+  defaultCollapsed?: boolean;
 }) {
-  const [collapsed, setCollapsed] = useState(collapsible);
+  const [collapsed, setCollapsed] = useState(collapsible && (defaultCollapsed ?? collapsible));
   return (
     <div className="space-y-2">
       <button

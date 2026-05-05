@@ -172,6 +172,12 @@ function BrandIdentitySection({
   const saveToastRef = useRef<string | null>(null);
   const autoToastRef = useRef<string | null>(null);
 
+  const isDirty =
+    positioning !== initial.positioning ||
+    audience !== initial.target_audience ||
+    tone !== initial.tone_guide ||
+    taboo !== initial.taboo_words.join("、");
+
   // Save brand identity: toast on pending → ok/err
   useEffect(() => {
     if (savePending && !savePendingRef.current) {
@@ -214,13 +220,28 @@ function BrandIdentitySection({
 
   function applyAutoResult() {
     if (!autoState || !("success" in autoState) || !autoState.success) return;
-    setPositioning(autoState.positioning);
-    setAudience(autoState.target_audience);
-    setTone(autoState.tone_guide);
-    setTaboo(autoState.taboo_words.join("、"));
+    const next = {
+      positioning: autoState.positioning,
+      target_audience: autoState.target_audience,
+      tone_guide: autoState.tone_guide,
+      taboo_words: autoState.taboo_words.join("、"),
+    };
+    setPositioning(next.positioning);
+    setAudience(next.target_audience);
+    setTone(next.tone_guide);
+    setTaboo(next.taboo_words);
     setAutoUrl("");
     setShowAuto(false);
-    toast.push("已套用到下方欄位，記得點「儲存 Brand Identity」", "ok");
+
+    // Auto-save to Supabase brands table immediately
+    const fd = new FormData();
+    fd.append("brandId", brandId);
+    fd.append("positioning", next.positioning);
+    fd.append("target_audience", next.target_audience);
+    fd.append("tone_guide", next.tone_guide);
+    fd.append("taboo_words", next.taboo_words);
+    saveAction(fd);
+    setTimeout(() => router.refresh(), 800);
   }
 
   return (
@@ -374,10 +395,20 @@ function BrandIdentitySection({
             onClick={() => {
               setTimeout(() => router.refresh(), 600);
             }}
-            className="bg-[var(--accent)] px-5 py-2.5 text-xs font-bold tracking-wide text-[var(--background)] hover:bg-[var(--accent-glow)] transition disabled:opacity-50 inline-flex items-center gap-1.5"
+            className={`px-5 py-2.5 text-xs font-bold tracking-wide transition disabled:opacity-50 inline-flex items-center gap-1.5 ${
+              isDirty
+                ? "bg-[var(--accent)] text-[var(--background)] hover:bg-[var(--accent-glow)] ring-2 ring-[var(--accent)]/40"
+                : "bg-[var(--accent)]/40 text-[var(--background)]/70"
+            }`}
           >
             {savePending ? <><span className="spinner" /> 儲存中</> : "💾 儲存 Brand Identity"}
           </button>
+          {isDirty && !savePending && (
+            <span className="text-xs text-yellow-400 font-mono">⚠ 尚未儲存變更</span>
+          )}
+          {!isDirty && !savePending && (positioning || audience || tone || taboo) && (
+            <span className="text-xs text-[var(--accent)] font-mono">✓ 已儲存</span>
+          )}
           <button
             type="button"
             onClick={() => {
