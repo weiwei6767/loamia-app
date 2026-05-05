@@ -4,6 +4,7 @@ import { useActionState, useEffect, useMemo, useState, useTransition } from "rea
 import { useRouter } from "next/navigation";
 import { generateContent, deleteContentOutput, type ContentState } from "./actions";
 import { useI18n } from "@/lib/i18n/provider";
+import { SchedulePopoverButton } from "../schedule-popover";
 
 type ContentRow = {
   id: string;
@@ -371,8 +372,9 @@ function HistoryCard({
           </div>
           <div className="p-4">
             <div className="text-sm leading-relaxed whitespace-pre-wrap mb-3">{variant}</div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <CopyButton text={variant} />
+              <SchedulePopoverButton brandId={brandId} text={variant} />
               <button
                 type="button"
                 disabled={pending}

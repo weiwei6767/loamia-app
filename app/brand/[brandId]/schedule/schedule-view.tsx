@@ -97,11 +97,19 @@ function SinglePostScheduler({ brandId }: { brandId: string }) {
 
   return (
     <section className="border border-[var(--line)] bg-[var(--surface)] p-5 space-y-4">
-      <div>
-        <div className="font-mono text-xs tracking-widest text-[var(--accent)]">
-          1. 排程單篇貼文
+      <div className="flex items-start justify-between gap-3 flex-wrap">
+        <div>
+          <div className="font-mono text-xs tracking-widest text-[var(--accent)]">
+            1. 排程單篇貼文
+          </div>
+          <h3 className="mt-1 text-lg font-bold">預約發送（手動輸入）</h3>
         </div>
-        <h3 className="mt-1 text-lg font-bold">預約發送</h3>
+        <a
+          href={`/brand/${brandId}/content`}
+          className="text-[10px] text-[var(--muted)] hover:text-[var(--accent)] transition border-b border-dashed border-[var(--line)] hover:border-[var(--accent)]"
+        >
+          💡 想用 AI 生？前往 CONTENT 生成後直接點 📅 排程 →
+        </a>
       </div>
 
       <form ref={formRef} action={action} className="space-y-3">

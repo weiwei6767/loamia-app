@@ -66,6 +66,44 @@ export async function deleteScheduledPost(postId: string, brandId: string) {
   revalidatePath(`/brand/${brandId}/schedule`);
 }
 
+export async function quickSchedulePost(
+  brandId: string,
+  text: string,
+  scheduledAtIso: string
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (!brandId || !text.trim()) return { ok: false, error: "缺少內容或品牌" };
+  if (text.length > 500) return { ok: false, error: "Threads 貼文最多 500 字" };
+
+  const dt = new Date(scheduledAtIso);
+  if (Number.isNaN(dt.getTime())) return { ok: false, error: "時間格式錯誤" };
+  if (dt.getTime() < Date.now() - 60_000) return { ok: false, error: "排程時間不能在過去" };
+
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "未登入" };
+
+  const { data: brand } = await supabase
+    .from("brands")
+    .select("id, agency_id")
+    .eq("id", brandId)
+    .single();
+  if (!brand) return { ok: false, error: "品牌不存在" };
+
+  const { error } = await supabase.from("scheduled_posts").insert({
+    agency_id: brand.agency_id,
+    brand_id: brand.id,
+    user_id: user.id,
+    platform: "threads",
+    text: text.trim(),
+    scheduled_at: dt.toISOString(),
+    status: "pending",
+  });
+  if (error) return { ok: false, error: error.message };
+
+  revalidatePath(`/brand/${brandId}/schedule`);
+  return { ok: true };
+}
+
 // ── Bulk create (multiple posts at once) ────────────
 
 export type BulkScheduleState =
