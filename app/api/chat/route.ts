@@ -139,31 +139,28 @@ export async function POST(req: NextRequest) {
           const partialBlocks: Record<number, { type: "text"; text: string } | { type: "tool_use"; id: string; name: string; partialJson: string }> = {};
 
           for await (const event of stream) {
-            if (event.type === "content_block_start") {
-              if (event.content_block.type === "text") {
+            if (event.type === "content_block_start" && event.content_block && event.index !== undefined) {
+              const cb = event.content_block;
+              if (cb.type === "text") {
                 partialBlocks[event.index] = { type: "text", text: "" };
-              } else if (event.content_block.type === "tool_use") {
+              } else if (cb.type === "tool_use" && cb.id && cb.name) {
                 partialBlocks[event.index] = {
                   type: "tool_use",
-                  id: event.content_block.id,
-                  name: event.content_block.name,
+                  id: cb.id,
+                  name: cb.name,
                   partialJson: "",
                 };
                 controller.enqueue(
-                  ndjson({
-                    type: "tool_call_start",
-                    id: event.content_block.id,
-                    name: event.content_block.name,
-                  })
+                  ndjson({ type: "tool_call_start", id: cb.id, name: cb.name })
                 );
               }
-            } else if (event.type === "content_block_delta") {
+            } else if (event.type === "content_block_delta" && event.delta && event.index !== undefined) {
               const block = partialBlocks[event.index];
-              if (event.delta.type === "text_delta" && block?.type === "text") {
+              if (event.delta.type === "text_delta" && event.delta.text && block?.type === "text") {
                 block.text += event.delta.text;
                 fullText += event.delta.text;
                 controller.enqueue(ndjson({ type: "text", delta: event.delta.text }));
-              } else if (event.delta.type === "input_json_delta" && block?.type === "tool_use") {
+              } else if (event.delta.type === "input_json_delta" && event.delta.partial_json && block?.type === "tool_use") {
                 block.partialJson += event.delta.partial_json;
               }
             }
