@@ -50,11 +50,13 @@ export function Chat({
   brandName,
   threadId,
   initialMessages,
+  onThreadCreated,
 }: {
   brandId: string;
   brandName: string;
   threadId: string | null;
   initialMessages: StoredMessage[];
+  onThreadCreated?: (newThreadId: string) => void;
 }) {
   const router = useRouter();
   const { t } = useI18n();
@@ -183,8 +185,12 @@ export function Chat({
 
       // Update URL if a new thread was created so refresh keeps the conversation
       if (newThreadId && !threadId) {
-        router.replace(`/brand/${brandId}?thread=${newThreadId}`);
-        router.refresh();
+        if (onThreadCreated) {
+          onThreadCreated(newThreadId);
+        } else {
+          router.replace(`/brand/${brandId}?thread=${newThreadId}`);
+          router.refresh();
+        }
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : t("chat.error.send"));

@@ -4,7 +4,8 @@ import { createClient } from "@/lib/supabase/server";
 import { getServerT } from "@/lib/i18n/server";
 import { BrandStatusToggle } from "./brand-status-toggle";
 import { BrandSidebar } from "./sidebar";
-import { RightChat } from "./right-chat";
+import { ResizableSplit } from "./resizable-split";
+import { RightChatPanel } from "./right-chat-panel";
 
 export default async function BrandLayout({
   children,
@@ -53,25 +54,29 @@ export default async function BrandLayout({
         </div>
       </header>
 
-      {/* 3-column body: sidebar | main | chat */}
-      <div className="flex-1 grid grid-cols-1 md:grid-cols-[180px_1fr] xl:grid-cols-[180px_1fr_400px] overflow-hidden">
+      {/* Body: sidebar + resizable(main + chat) */}
+      <div className="flex-1 grid grid-cols-1 md:grid-cols-[180px_1fr] overflow-hidden">
         <aside className="border-r border-[var(--line)] overflow-y-auto bg-[var(--surface)]/40 hidden md:block">
           <BrandSidebar brandId={brand.id} />
         </aside>
 
-        <main className="overflow-y-auto">{children}</main>
-
-        <aside className="border-l border-[var(--line)] overflow-hidden hidden xl:flex flex-col bg-[var(--surface)]/40">
-          <div className="px-4 py-2 border-b border-[var(--line)] flex items-center gap-2 shrink-0">
-            <span className="text-base">🧠</span>
-            <span className="font-mono text-[10px] tracking-widest text-[var(--accent)]">
-              BRAND BRAIN · {(brand.name as string).toUpperCase()}
-            </span>
-          </div>
-          <div className="flex-1 min-h-0">
-            <RightChat brandId={brand.id} brandName={brand.name as string} />
-          </div>
-        </aside>
+        <ResizableSplit
+          rightContent={
+            <>
+              <div className="px-3 py-2 border-b border-[var(--line)] flex items-center gap-2 shrink-0">
+                <span className="text-base">🧠</span>
+                <span className="font-mono text-[10px] tracking-widest text-[var(--accent)] truncate">
+                  BRAND BRAIN · {(brand.name as string).toUpperCase()}
+                </span>
+              </div>
+              <div className="flex-1 min-h-0">
+                <RightChatPanel brandId={brand.id} brandName={brand.name as string} />
+              </div>
+            </>
+          }
+        >
+          {children}
+        </ResizableSplit>
       </div>
     </div>
   );
