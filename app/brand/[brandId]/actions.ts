@@ -141,6 +141,71 @@ export async function deleteDocument(documentId: string, brandId: string) {
   revalidatePath(`/brand/${brandId}/data`);
 }
 
+export type DocumentPreview = {
+  ok: true;
+  filename: string;
+  mimeType: string | null;
+  signedUrl: string;
+  textContent: string | null;
+  truncated: boolean;
+} | { ok: false; error: string };
+
+export async function getDocumentPreview(documentId: string): Promise<DocumentPreview> {
+  const supabase = await createClient();
+  const { data: doc, error } = await supabase
+    .from("documents")
+    .select("filename, storage_path, mime_type")
+    .eq("id", documentId)
+    .single();
+  if (error || !doc) return { ok: false, error: error?.message ?? "找不到文件" };
+  const storagePath = doc.storage_path as string | null;
+  if (!storagePath) return { ok: false, error: "此文件沒有原始檔案" };
+
+  const { data: signed, error: signErr } = await supabase.storage
+    .from("documents")
+    .createSignedUrl(storagePath, 600); // 10 minutes
+  if (signErr || !signed?.signedUrl) {
+    return { ok: false, error: signErr?.message ?? "產生連結失敗" };
+  }
+
+  const mime = (doc.mime_type as string | null) ?? "";
+  const isTextLike =
+    mime.startsWith("text/") ||
+    mime === "application/json" ||
+    mime === "" ||
+    storagePath.toLowerCase().endsWith(".txt") ||
+    storagePath.toLowerCase().endsWith(".md") ||
+    storagePath.toLowerCase().endsWith(".csv");
+
+  let textContent: string | null = null;
+  let truncated = false;
+  if (isTextLike) {
+    const { data: blob, error: dlErr } = await supabase.storage
+      .from("documents")
+      .download(storagePath);
+    if (!dlErr && blob) {
+      const buf = Buffer.from(await blob.arrayBuffer());
+      const raw = buf.toString("utf-8");
+      const MAX = 50_000;
+      if (raw.length > MAX) {
+        textContent = raw.slice(0, MAX);
+        truncated = true;
+      } else {
+        textContent = raw;
+      }
+    }
+  }
+
+  return {
+    ok: true,
+    filename: doc.filename as string,
+    mimeType: mime || null,
+    signedUrl: signed.signedUrl,
+    textContent,
+    truncated,
+  };
+}
+
 export async function updateDocumentTags(
   documentId: string,
   brandId: string,

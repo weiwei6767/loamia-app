@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { uploadDocument, deleteDocument, deleteDocumentsBatch, updateDocumentTags } from "../actions";
 import { useI18n } from "@/lib/i18n/provider";
 import { UploadProgressList } from "../upload-progress";
+import { DocumentViewer } from "../document-viewer";
 
 type Doc = {
   id: string;
@@ -51,6 +52,7 @@ export function DataView({ brandId, documents }: { brandId: string; documents: D
   const [search, setSearch] = useState("");
   const [activeTags, setActiveTags] = useState<Set<string>>(new Set());
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [viewingId, setViewingId] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
   const stats = {
@@ -399,6 +401,7 @@ export function DataView({ brandId, documents }: { brandId: string; documents: D
                     selected={selected}
                     toggleSelect={toggleSelect}
                     handleDelete={handleDelete}
+                    onView={setViewingId}
                     t={t}
                   />
                 )}
@@ -411,6 +414,7 @@ export function DataView({ brandId, documents }: { brandId: string; documents: D
                     selected={selected}
                     toggleSelect={toggleSelect}
                     handleDelete={handleDelete}
+                    onView={setViewingId}
                     t={t}
                     collapsible
                     defaultCollapsed={autoDocs.length > 3}
@@ -428,6 +432,8 @@ export function DataView({ brandId, documents }: { brandId: string; documents: D
           <ToastItem key={toast.id} toast={toast} onDismiss={() => dismissToast(toast.id)} />
         ))}
       </div>
+
+      <DocumentViewer docId={viewingId} onClose={() => setViewingId(null)} />
     </>
   );
 }
@@ -440,6 +446,7 @@ function DocSection({
   selected,
   toggleSelect,
   handleDelete,
+  onView,
   t,
   collapsible = false,
   defaultCollapsed,
@@ -451,6 +458,7 @@ function DocSection({
   selected: Set<string>;
   toggleSelect: (id: string) => void;
   handleDelete: (id: string) => void;
+  onView: (id: string) => void;
   t: ReturnType<typeof useI18n>["t"];
   collapsible?: boolean;
   defaultCollapsed?: boolean;
@@ -510,13 +518,23 @@ function DocSection({
                   <div className="mt-1 text-xs text-red-400 break-words">{d.error_message}</div>
                 )}
               </div>
-              <button
-                onClick={() => handleDelete(d.id)}
-                className="text-[var(--muted)] hover:text-red-400 shrink-0"
-                aria-label="delete"
-              >
-                ✕
-              </button>
+              <div className="flex items-center gap-1 shrink-0">
+                <button
+                  onClick={() => onView(d.id)}
+                  className="text-[var(--muted)] hover:text-[var(--accent)] px-1.5 py-1 text-xs"
+                  aria-label="view"
+                  title="查看內容"
+                >
+                  👁
+                </button>
+                <button
+                  onClick={() => handleDelete(d.id)}
+                  className="text-[var(--muted)] hover:text-red-400 px-1.5 py-1"
+                  aria-label="delete"
+                >
+                  ✕
+                </button>
+              </div>
             </li>
           ))}
         </ul>
