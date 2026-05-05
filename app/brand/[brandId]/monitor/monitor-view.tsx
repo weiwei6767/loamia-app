@@ -46,7 +46,7 @@ function groupByMonth(rows: MonitorRow[], locale: "zh" | "en") {
       const label =
         locale === "zh"
           ? `${y} · ${parseInt(m, 10)} 月`
-          : `${y} · ${["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][parseInt(m,10)-1]}`;
+          : `${["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][parseInt(m,10)-1]} ${y}`;
       return { key, label, rows: list };
     });
 }
@@ -97,7 +97,7 @@ export function MonitorView({
     if (sourceTypeRef.current) {
       sourceTypeRef.current.value = post.username
         ? `Threads · @${post.username}`
-        : "Threads 貼文";
+        : "Threads";
     }
     if (threadsUrlRef.current && post.permalink) {
       threadsUrlRef.current.value = post.permalink;
@@ -226,7 +226,7 @@ export function MonitorView({
             htmlFor="threadsUrl"
             className="mb-1.5 block text-xs font-medium tracking-wide text-[var(--muted)]"
           >
-            Threads 貼文網址（選填，填了之後可直接從建議發送回覆）
+            {t("monitor.threads_url.label")}
           </label>
           <input
             ref={threadsUrlRef}
@@ -342,7 +342,7 @@ function ReplyCard({
 
   async function sendToThreads() {
     if (!row.threads_url || !reply) return;
-    if (!confirm(`確定發送這則回覆到 Threads？\n\n${reply}`)) return;
+    if (!confirm(`${t("monitor.send.confirm")}\n\n${reply}`)) return;
     setSendStatus("sending");
     setSendError("");
     const fd = new FormData();
@@ -434,12 +434,12 @@ function ReplyCard({
                   }`}
                 >
                   {sendStatus === "sending"
-                    ? "↻ 發送中..."
+                    ? t("monitor.send.sending")
                     : sendStatus === "sent"
-                      ? "✓ 已發送"
+                      ? t("monitor.send.sent")
                       : sendStatus === "error"
-                        ? "✕ 失敗，重試"
-                        : "📤 發送到 Threads"}
+                        ? t("monitor.send.failed")
+                        : t("monitor.send.button")}
                 </button>
               )}
               {row.threads_url && (
@@ -449,7 +449,7 @@ function ReplyCard({
                   rel="noopener noreferrer"
                   className="text-xs px-3 py-1.5 border border-[var(--line)] text-[var(--muted)] hover:text-[var(--foreground)] hover:border-[var(--accent)] transition"
                 >
-                  ↗ 原貼文
+                  {t("monitor.original_post")}
                 </a>
               )}
               <button
@@ -462,7 +462,7 @@ function ReplyCard({
                 }}
                 className="text-xs px-3 py-1.5 border border-[var(--line)] text-[var(--muted)] hover:border-red-400 hover:text-red-400 transition disabled:opacity-50"
               >
-                ✕ {pending ? "..." : "刪除"}
+                ✕ {pending ? "..." : t("monitor.delete")}
               </button>
             </div>
             {sendError && (
@@ -538,7 +538,7 @@ function ToastItem({ toast, onDismiss }: { toast: Toast; onDismiss: () => void }
             }`}
           >
             {isError
-              ? `✕ ${toast.error ?? "失敗"}`
+              ? `✕ ${toast.error ?? t("monitor.toast.failed")}`
               : isDone
                 ? `✓ ${t("monitor.toast.success")}`
                 : `↻ ${t("monitor.generating")}`}

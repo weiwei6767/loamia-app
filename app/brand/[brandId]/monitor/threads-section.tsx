@@ -48,7 +48,7 @@ export function ThreadsSection({
               {t("monitor.threads.section")}
             </div>
             <p className="text-xs text-[var(--muted)] leading-relaxed">
-              連接後可關鍵字搜尋 Threads 公開貼文 + AI 一鍵生成回覆
+              {t("monitor.threads.section_subtitle")}
             </p>
           </div>
           <a
@@ -190,6 +190,7 @@ export function ThreadsSection({
 }
 
 function DirectReplyForm({ brandId }: { brandId: string }) {
+  const { t } = useI18n();
   const [state, action, pending] = useActionState<ThreadsReplyState, FormData>(
     postThreadsReply,
     undefined
@@ -201,11 +202,10 @@ function DirectReplyForm({ brandId }: { brandId: string }) {
       className="border-t border-[var(--line)] pt-4 space-y-3"
     >
       <div className="font-mono text-xs tracking-widest text-[var(--accent)]">
-        📤 直接發送回覆 (Beta)
+        {t("monitor.threads.direct_reply.title")}
       </div>
       <p className="text-xs text-[var(--muted)] leading-relaxed">
-        貼上你自己 Threads 貼文網址，輸入回覆內容，直接以連接帳號發送。
-        （非自己的貼文需 keyword_search 權限，待 Meta App Review 通過。）
+        {t("monitor.threads.direct_reply.note")}
       </p>
       <input type="hidden" name="brandId" value={brandId} />
       <input
@@ -220,14 +220,16 @@ function DirectReplyForm({ brandId }: { brandId: string }) {
         required
         rows={3}
         maxLength={500}
-        placeholder="輸入回覆內容..."
+        placeholder={t("monitor.threads.direct_reply.text_placeholder")}
         className="w-full border border-[var(--line)] bg-[var(--surface-2)] px-3 py-2 text-sm focus:border-[var(--accent)] focus:outline-none leading-relaxed"
       />
       {state && "error" in state && state.error && (
         <p className="text-xs text-red-400">{state.error}</p>
       )}
       {state && "success" in state && state.success && (
-        <p className="text-xs text-[var(--accent)]">✓ 回覆已發送 (id: {state.replyId})</p>
+        <p className="text-xs text-[var(--accent)]">
+          {t("monitor.threads.direct_reply.success").replace("{id}", state.replyId)}
+        </p>
       )}
       <button
         type="submit"
@@ -236,10 +238,10 @@ function DirectReplyForm({ brandId }: { brandId: string }) {
       >
         {pending ? (
           <>
-            <span className="spinner" /> 發送中
+            <span className="spinner" /> {t("monitor.threads.direct_reply.sending")}
           </>
         ) : (
-          "📤 發送回覆"
+          t("monitor.threads.direct_reply.button")
         )}
       </button>
     </form>
