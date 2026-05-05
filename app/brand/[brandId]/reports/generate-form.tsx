@@ -15,6 +15,7 @@ import {
 } from "./actions";
 import { useI18n } from "@/lib/i18n/provider";
 import { Uploader } from "../uploader";
+import { InlineUploader } from "../inline-uploader";
 import { deleteDocument } from "../actions";
 import { STYLES, STYLE_KEYS, type StyleKey } from "@/lib/ai/styles";
 
@@ -377,7 +378,7 @@ export function GenerateForm({
             <div className="text-xs font-mono tracking-widest text-[var(--muted)]">
               + {t("reports.source.upload_more")}
             </div>
-            <Uploader brandId={brandId} />
+            <InlineUploader brandId={brandId} />
             <p className="text-[10px] text-[var(--muted)] leading-relaxed">
               {t("reports.source.upload_hint")}
             </p>
