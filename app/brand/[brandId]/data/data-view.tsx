@@ -2,8 +2,9 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { uploadDocument, deleteDocument, deleteDocumentsBatch } from "../actions";
+import { uploadDocument, deleteDocument, deleteDocumentsBatch, updateDocumentTags } from "../actions";
 import { useI18n } from "@/lib/i18n/provider";
+import { UploadProgressList } from "../upload-progress";
 
 type Doc = {
   id: string;
@@ -12,6 +13,7 @@ type Doc = {
   byte_size: number | null;
   created_at: string;
   error_message: string | null;
+  tags: string[] | null;
 };
 
 type StagedFile = {
@@ -47,6 +49,7 @@ export function DataView({ brandId, documents }: { brandId: string; documents: D
   const [uploading, setUploading] = useState(false);
   const [showList, setShowList] = useState(false);
   const [search, setSearch] = useState("");
+  const [activeTags, setActiveTags] = useState<Set<string>>(new Set());
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [pending, startTransition] = useTransition();
 
@@ -57,9 +60,29 @@ export function DataView({ brandId, documents }: { brandId: string; documents: D
     error: documents.filter((d) => d.status === "error").length,
   };
 
-  const filteredDocs = search.trim()
-    ? documents.filter((d) => d.filename.toLowerCase().includes(search.toLowerCase()))
-    : documents;
+  const allTags = Array.from(
+    new Set(documents.flatMap((d) => d.tags ?? []))
+  ).sort();
+
+  const filteredDocs = documents.filter((d) => {
+    if (search.trim() && !d.filename.toLowerCase().includes(search.toLowerCase())) return false;
+    if (activeTags.size > 0) {
+      const docTags = new Set(d.tags ?? []);
+      for (const tag of activeTags) {
+        if (!docTags.has(tag)) return false;
+      }
+    }
+    return true;
+  });
+
+  function toggleTag(tag: string) {
+    setActiveTags((prev) => {
+      const next = new Set(prev);
+      if (next.has(tag)) next.delete(tag);
+      else next.add(tag);
+      return next;
+    });
+  }
 
   function addFiles(files: FileList | File[]) {
     const arr = Array.from(files);
@@ -278,6 +301,8 @@ export function DataView({ brandId, documents }: { brandId: string; documents: D
           <span className="text-[var(--accent)] text-sm">{showList ? "▲" : "▼"}</span>
         </button>
 
+        <UploadProgressList brandId={brandId} />
+
         {showList && (
           <div className="mt-3 space-y-3">
             <input
@@ -287,6 +312,38 @@ export function DataView({ brandId, documents }: { brandId: string; documents: D
               placeholder={t("data.list.search")}
               className="w-full text-sm px-3 py-2 border border-[var(--line)] bg-[var(--surface-2)] focus:border-[var(--accent)] focus:outline-none"
             />
+
+            {allTags.length > 0 && (
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="text-[10px] text-[var(--muted)] font-mono mr-1">標籤：</span>
+                {allTags.map((tag) => {
+                  const active = activeTags.has(tag);
+                  return (
+                    <button
+                      key={tag}
+                      type="button"
+                      onClick={() => toggleTag(tag)}
+                      className={`text-[10px] px-2 py-1 border transition ${
+                        active
+                          ? "border-[var(--accent)] bg-[var(--accent)] text-[var(--background)] font-bold"
+                          : "border-[var(--line)] text-[var(--muted)] hover:border-[var(--accent)]/50 hover:text-[var(--foreground)]"
+                      }`}
+                    >
+                      {tag}
+                    </button>
+                  );
+                })}
+                {activeTags.size > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setActiveTags(new Set())}
+                    className="text-[10px] text-[var(--muted)] hover:text-red-400 ml-1"
+                  >
+                    ✕ 清除標籤篩選
+                  </button>
+                )}
+              </div>
+            )}
 
             {filteredDocs.length > 0 && (
               <div className="flex items-center justify-between gap-2 py-1.5 px-2 border border-[var(--line)] bg-[var(--surface-2)]">
@@ -351,6 +408,11 @@ export function DataView({ brandId, documents }: { brandId: string; documents: D
                         <span>·</span>
                         <span>{new Date(d.created_at).toLocaleDateString()}</span>
                       </div>
+                      <DocTagEditor
+                        docId={d.id}
+                        brandId={brandId}
+                        tags={d.tags ?? []}
+                      />
                       {d.error_message && (
                         <div className="mt-1 text-xs text-red-400 break-words">{d.error_message}</div>
                       )}
@@ -377,6 +439,100 @@ export function DataView({ brandId, documents }: { brandId: string; documents: D
         ))}
       </div>
     </>
+  );
+}
+
+function DocTagEditor({
+  docId,
+  brandId,
+  tags,
+}: {
+  docId: string;
+  brandId: string;
+  tags: string[];
+}) {
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState("");
+
+  function commit(newTags: string[]) {
+    startTransition(async () => {
+      await updateDocumentTags(docId, brandId, newTags);
+      router.refresh();
+    });
+  }
+
+  function addFromDraft() {
+    const newTags = [...tags];
+    draft
+      .split(/[,，、\s]+/)
+      .map((t) => t.trim())
+      .filter(Boolean)
+      .forEach((t) => {
+        if (!newTags.includes(t)) newTags.push(t);
+      });
+    setDraft("");
+    setEditing(false);
+    commit(newTags);
+  }
+
+  function removeTag(tag: string) {
+    commit(tags.filter((t) => t !== tag));
+  }
+
+  return (
+    <div className="mt-1.5 flex flex-wrap items-center gap-1">
+      {tags.map((tag) => (
+        <span
+          key={tag}
+          className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 border border-[var(--line)] bg-[var(--surface)] text-[var(--muted)] font-mono"
+        >
+          {tag}
+          <button
+            type="button"
+            disabled={pending}
+            onClick={() => removeTag(tag)}
+            className="hover:text-red-400 transition disabled:opacity-50"
+            aria-label={`remove ${tag}`}
+          >
+            ✕
+          </button>
+        </span>
+      ))}
+      {editing ? (
+        <input
+          autoFocus
+          type="text"
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              addFromDraft();
+            } else if (e.key === "Escape") {
+              setDraft("");
+              setEditing(false);
+            }
+          }}
+          onBlur={() => {
+            if (draft.trim()) addFromDraft();
+            else setEditing(false);
+          }}
+          placeholder="新標籤..."
+          className="text-[10px] px-1.5 py-0.5 border border-[var(--accent)]/50 bg-[var(--surface)] focus:border-[var(--accent)] focus:outline-none w-24"
+        />
+      ) : (
+        <button
+          type="button"
+          onClick={() => setEditing(true)}
+          disabled={pending}
+          className="text-[10px] px-1.5 py-0.5 border border-dashed border-[var(--line)] text-[var(--muted)] hover:border-[var(--accent)] hover:text-[var(--accent)] transition disabled:opacity-50"
+        >
+          + 加標籤
+        </button>
+      )}
+    </div>
   );
 }
 

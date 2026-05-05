@@ -12,6 +12,7 @@ type Doc = {
   byte_size: number | null;
   created_at: string;
   error_message: string | null;
+  tags: string[] | null;
 };
 
 export default async function DataPage({
@@ -33,7 +34,7 @@ export default async function DataPage({
 
   const { data: documents } = await supabase
     .from("documents")
-    .select("id, filename, status, byte_size, created_at, error_message")
+    .select("id, filename, status, byte_size, created_at, error_message, tags")
     .eq("brand_id", brand.id)
     .order("created_at", { ascending: false });
 

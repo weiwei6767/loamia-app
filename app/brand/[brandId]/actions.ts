@@ -141,6 +141,24 @@ export async function deleteDocument(documentId: string, brandId: string) {
   revalidatePath(`/brand/${brandId}/data`);
 }
 
+export async function updateDocumentTags(
+  documentId: string,
+  brandId: string,
+  tags: string[]
+): Promise<void> {
+  const cleaned = tags
+    .map((t) => t.trim())
+    .filter(Boolean)
+    .filter((t, i, arr) => arr.indexOf(t) === i)
+    .slice(0, 20);
+  const supabase = await createClient();
+  await supabase
+    .from("documents")
+    .update({ tags: cleaned.length > 0 ? cleaned : null })
+    .eq("id", documentId);
+  revalidatePath(`/brand/${brandId}/data`);
+}
+
 export async function deleteDocumentsBatch(documentIds: string[], brandId: string) {
   if (documentIds.length === 0) return;
   const supabase = await createClient();
