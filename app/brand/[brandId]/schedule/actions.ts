@@ -117,6 +117,7 @@ export async function bulkCreateScheduledPosts(
 ): Promise<BulkScheduleState> {
   const brandId = String(formData.get("brandId") ?? "");
   const blob = String(formData.get("blob") ?? "").trim();
+  const tzOffsetMinutes = parseInt(String(formData.get("tzOffsetMinutes") ?? "0"), 10) || 0;
   if (!brandId || !blob) return { error: "請貼上多筆貼文（每筆用 ===POST=== 分隔）" };
 
   const supabase = await createClient();
@@ -153,11 +154,16 @@ export async function bulkCreateScheduledPosts(
     const lines = block.split(/\r?\n/);
     const firstLine = lines.shift()?.trim() ?? "";
     const text = lines.join("\n").trim();
-    const dt = new Date(firstLine);
-    if (Number.isNaN(dt.getTime())) {
+    const parsed = new Date(firstLine);
+    if (Number.isNaN(parsed.getTime())) {
       errors.push(`第 ${idx + 1} 筆：時間格式錯誤「${firstLine}」`);
       return;
     }
+    // If line has no explicit timezone (no Z, no +HH:MM), treat as user's local time
+    const hasTz = /[zZ]|[+-]\d\d:?\d\d$/.test(firstLine);
+    const dt = hasTz
+      ? parsed
+      : new Date(parsed.getTime() + tzOffsetMinutes * 60 * 1000);
     if (!text) {
       errors.push(`第 ${idx + 1} 筆：沒有貼文內容`);
       return;
@@ -203,6 +209,7 @@ export async function createPostTemplate(
   const recurrenceRaw = String(formData.get("recurrence") ?? "");
   const weekdayRaw = String(formData.get("weekday") ?? "");
   const timeOfDay = String(formData.get("timeOfDay") ?? "").trim();
+  const tzOffsetMinutes = parseInt(String(formData.get("tzOffsetMinutes") ?? "0"), 10) || 0;
 
   if (!brandId || !name || !prompt || !timeOfDay) return { error: "缺少欄位" };
   if (!/^([01]\d|2[0-3]):([0-5]\d)$/.test(timeOfDay)) return { error: "時間格式 HH:MM" };
@@ -222,7 +229,7 @@ export async function createPostTemplate(
     .single();
   if (!brand) return { error: "品牌不存在" };
 
-  const next = computeNextRun(new Date(), recurrence, timeOfDay, weekday);
+  const next = computeNextRun(new Date(), recurrence, timeOfDay, weekday, tzOffsetMinutes);
 
   const { error } = await supabase.from("post_templates").insert({
     agency_id: brand.agency_id,
@@ -233,6 +240,7 @@ export async function createPostTemplate(
     recurrence,
     weekday,
     time_of_day: timeOfDay,
+    tz_offset_minutes: tzOffsetMinutes,
     next_run_at: next.toISOString(),
     active: true,
   });

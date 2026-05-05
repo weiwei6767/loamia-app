@@ -3,6 +3,22 @@
 import { useState, useTransition } from "react";
 import { quickSchedulePost } from "./schedule/actions";
 
+// Convert a datetime-local input string ("YYYY-MM-DDTHH:mm" interpreted as user's local TZ)
+// into a proper UTC ISO string so the server stores the correct moment.
+function localInputToUtcIso(local: string): string {
+  if (!local) return "";
+  const d = new Date(local); // browser parses as local
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toISOString();
+}
+
+function nowPlusMinLocalInput(minutes: number): string {
+  const d = new Date(Date.now() + minutes * 60 * 1000);
+  // Build YYYY-MM-DDTHH:mm in LOCAL time (not UTC like toISOString)
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 export function SchedulePopoverButton({
   brandId,
   text,
@@ -16,15 +32,18 @@ export function SchedulePopoverButton({
 }) {
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
-  const [scheduledAt, setScheduledAt] = useState(() =>
-    new Date(Date.now() + 30 * 60 * 1000).toISOString().slice(0, 16)
-  );
+  const [scheduledAt, setScheduledAt] = useState(() => nowPlusMinLocalInput(30));
   const [msg, setMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
 
   function submit() {
     setMsg(null);
+    const utcIso = localInputToUtcIso(scheduledAt);
+    if (!utcIso) {
+      setMsg({ kind: "err", text: "時間格式錯誤" });
+      return;
+    }
     startTransition(async () => {
-      const result = await quickSchedulePost(brandId, text, scheduledAt);
+      const result = await quickSchedulePost(brandId, text, utcIso);
       if (result.ok) {
         setMsg({ kind: "ok", text: "✓ 已加入排程，前往 SCHEDULE 查看" });
         setTimeout(() => {
@@ -37,7 +56,7 @@ export function SchedulePopoverButton({
     });
   }
 
-  const minDateTime = new Date(Date.now() + 60_000).toISOString().slice(0, 16);
+  const minDateTime = nowPlusMinLocalInput(1);
 
   return (
     <div className="relative inline-block">

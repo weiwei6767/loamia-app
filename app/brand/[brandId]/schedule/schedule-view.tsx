@@ -38,6 +38,19 @@ type Template = {
 
 const WEEKDAYS = ["週日", "週一", "週二", "週三", "週四", "週五", "週六"];
 
+function localToUtcIso(local: string): string {
+  if (!local) return "";
+  const d = new Date(local);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toISOString();
+}
+
+function nowPlusMinLocalInput(minutes: number): string {
+  const d = new Date(Date.now() + minutes * 60 * 1000);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 export function ScheduleView({
   brandId,
   threadsUsername,
@@ -93,7 +106,8 @@ function SinglePostScheduler({ brandId }: { brandId: string }) {
     }
   }, [state, router]);
 
-  const minDateTime = new Date(Date.now() + 60_000).toISOString().slice(0, 16);
+  const minDateTime = nowPlusMinLocalInput(1);
+  const [localDt, setLocalDt] = useState(minDateTime);
 
   return (
     <section className="border border-[var(--line)] bg-[var(--surface)] p-5 space-y-4">
@@ -130,16 +144,18 @@ function SinglePostScheduler({ brandId }: { brandId: string }) {
         <div className="flex items-end gap-3 flex-wrap">
           <div>
             <label className="mb-1.5 block text-xs font-medium text-[var(--muted)]">
-              發送時間
+              發送時間（你的本地時間）
             </label>
             <input
-              name="scheduledAt"
               type="datetime-local"
               required
               min={minDateTime}
-              defaultValue={minDateTime}
+              value={localDt}
+              onChange={(e) => setLocalDt(e.target.value)}
               className="border border-[var(--line)] bg-[var(--surface-2)] px-3 py-2 text-sm focus:border-[var(--accent)] focus:outline-none"
             />
+            {/* Convert local-input to UTC ISO for the server */}
+            <input type="hidden" name="scheduledAt" value={localToUtcIso(localDt)} />
           </div>
           <button
             type="submit"
@@ -186,6 +202,11 @@ function BulkScheduler({ brandId }: { brandId: string }) {
 
       <form ref={formRef} action={action} className="space-y-3">
         <input type="hidden" name="brandId" value={brandId} />
+        <input
+          type="hidden"
+          name="tzOffsetMinutes"
+          value={typeof window !== "undefined" ? new Date().getTimezoneOffset() : 0}
+        />
         <textarea
           name="blob"
           rows={10}
@@ -259,6 +280,11 @@ function TemplateScheduler({
       {showCreate && (
         <form ref={formRef} action={action} className="space-y-3 bg-[var(--surface-2)] p-4 border border-[var(--line)]">
           <input type="hidden" name="brandId" value={brandId} />
+          <input
+            type="hidden"
+            name="tzOffsetMinutes"
+            value={typeof window !== "undefined" ? new Date().getTimezoneOffset() : 0}
+          />
           <input
             name="name"
             type="text"

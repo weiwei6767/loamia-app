@@ -3,36 +3,44 @@ import "server-only";
 export type Recurrence = "daily" | "weekly";
 
 /**
- * Compute the next run timestamp given the current time, recurrence, optional weekday, and time of day (HH:MM).
- *
- * - daily: next occurrence of HH:MM today or tomorrow
- * - weekly: next occurrence of weekday at HH:MM (weekday: 0=Sun..6=Sat)
+ * Compute the next run timestamp given the current UTC moment, recurrence,
+ * optional weekday, time-of-day (HH:MM in user's local TZ), and the user's
+ * timezone offset in minutes (Date.getTimezoneOffset() — Taipei = -480).
  */
 export function computeNextRun(
   now: Date,
   recurrence: Recurrence,
   timeOfDay: string,
-  weekday: number | null
+  weekday: number | null,
+  tzOffsetMinutes: number = 0
 ): Date {
   const [hh, mm] = timeOfDay.split(":").map((n) => parseInt(n, 10));
   if (Number.isNaN(hh) || Number.isNaN(mm)) {
     throw new Error("invalid time_of_day");
   }
 
-  const next = new Date(now);
-  next.setSeconds(0, 0);
-  next.setHours(hh, mm, 0, 0);
+  // Convert "now" into a Date whose UTC components reflect the user's local clock.
+  // Trick: subtract offsetMinutes so getUTC* methods return user-local values.
+  const userNowMs = now.getTime() - tzOffsetMinutes * 60 * 1000;
+  const userNow = new Date(userNowMs);
+
+  // Build candidate at HH:MM "today" in user-local space
+  const candidate = new Date(userNow);
+  candidate.setUTCHours(hh, mm, 0, 0);
 
   if (recurrence === "daily") {
-    if (next <= now) next.setDate(next.getDate() + 1);
-    return next;
+    if (candidate.getTime() <= userNow.getTime()) {
+      candidate.setUTCDate(candidate.getUTCDate() + 1);
+    }
+  } else {
+    // weekly
+    const targetWeekday = weekday ?? 1;
+    const currentWeekday = candidate.getUTCDay();
+    let daysAhead = (targetWeekday - currentWeekday + 7) % 7;
+    if (daysAhead === 0 && candidate.getTime() <= userNow.getTime()) daysAhead = 7;
+    candidate.setUTCDate(candidate.getUTCDate() + daysAhead);
   }
 
-  // weekly
-  const targetWeekday = weekday ?? 1; // default Mon
-  const currentWeekday = next.getDay();
-  let daysAhead = (targetWeekday - currentWeekday + 7) % 7;
-  if (daysAhead === 0 && next <= now) daysAhead = 7;
-  next.setDate(next.getDate() + daysAhead);
-  return next;
+  // Convert user-local moment back to UTC
+  return new Date(candidate.getTime() + tzOffsetMinutes * 60 * 1000);
 }

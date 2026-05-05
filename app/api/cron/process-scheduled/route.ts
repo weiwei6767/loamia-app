@@ -33,6 +33,7 @@ type TemplateRow = {
   recurrence: Recurrence;
   weekday: number | null;
   time_of_day: string;
+  tz_offset_minutes: number | null;
   next_run_at: string;
 };
 
@@ -54,7 +55,7 @@ export async function GET(req: NextRequest) {
   // ── 1. Templates due → generate post + insert into scheduled_posts (immediate) ──
   const { data: dueTemplates } = await supabase
     .from("post_templates")
-    .select("id, agency_id, brand_id, user_id, prompt, recurrence, weekday, time_of_day, next_run_at")
+    .select("id, agency_id, brand_id, user_id, prompt, recurrence, weekday, time_of_day, tz_offset_minutes, next_run_at")
     .eq("active", true)
     .lte("next_run_at", nowIso);
 
@@ -92,7 +93,13 @@ export async function GET(req: NextRequest) {
         template_id: tmpl.id,
       });
 
-      const next = computeNextRun(new Date(), tmpl.recurrence, tmpl.time_of_day, tmpl.weekday);
+      const next = computeNextRun(
+        new Date(),
+        tmpl.recurrence,
+        tmpl.time_of_day,
+        tmpl.weekday,
+        tmpl.tz_offset_minutes ?? 0
+      );
       await supabase
         .from("post_templates")
         .update({ next_run_at: next.toISOString() })
