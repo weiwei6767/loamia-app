@@ -203,6 +203,7 @@ function BrandIdentitySection({
         if ("success" in autoState && autoState.success) {
           const dataNote = autoState.savedToDataId ? "（原始內容已存入 DATA）" : "";
           toast.update(tid, `分析完成${dataNote}，請按「✓ 套用到下方欄位」`, "ok");
+          setAutoUrl(""); // clear URL right after success so user can paste next one
         } else if ("error" in autoState) {
           toast.update(tid, `分析失敗：${autoState.error}`, "err");
         }
@@ -371,12 +372,24 @@ function BrandIdentitySection({
             type="submit"
             disabled={savePending}
             onClick={() => {
-              // Refresh page state after the save action settles
               setTimeout(() => router.refresh(), 600);
             }}
             className="bg-[var(--accent)] px-5 py-2.5 text-xs font-bold tracking-wide text-[var(--background)] hover:bg-[var(--accent-glow)] transition disabled:opacity-50 inline-flex items-center gap-1.5"
           >
             {savePending ? <><span className="spinner" /> 儲存中</> : "💾 儲存 Brand Identity"}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              if (!confirm("確定清空所有欄位？（不會影響資料庫已儲存的設定，按儲存才會覆寫）")) return;
+              setPositioning("");
+              setAudience("");
+              setTone("");
+              setTaboo("");
+            }}
+            className="text-xs px-3 py-2.5 border border-[var(--line)] text-[var(--muted)] hover:border-red-400 hover:text-red-400 transition"
+          >
+            ✕ 全部清空
           </button>
           <span className="text-[10px] text-[var(--muted)] font-mono">
             儲存於 Supabase brands 表，AI 每次生成都會自動讀取此處設定

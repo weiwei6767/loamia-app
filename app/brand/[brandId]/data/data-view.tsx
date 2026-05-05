@@ -60,6 +60,10 @@ export function DataView({ brandId, documents }: { brandId: string; documents: D
     error: documents.filter((d) => d.status === "error").length,
   };
 
+  function isAutoFetched(d: Doc): boolean {
+    return (d.tags ?? []).includes("auto-fetched");
+  }
+
   const allTags = Array.from(
     new Set(documents.flatMap((d) => d.tags ?? []))
   ).sort();
@@ -74,6 +78,9 @@ export function DataView({ brandId, documents }: { brandId: string; documents: D
     }
     return true;
   });
+
+  const userDocs = filteredDocs.filter((d) => !isAutoFetched(d));
+  const autoDocs = filteredDocs.filter((d) => isAutoFetched(d));
 
   function toggleTag(tag: string) {
     setActiveTags((prev) => {
@@ -381,52 +388,33 @@ export function DataView({ brandId, documents }: { brandId: string; documents: D
             {filteredDocs.length === 0 ? (
               <p className="text-sm text-[var(--muted)] py-4 text-center">—</p>
             ) : (
-              <ul className="space-y-2">
-                {filteredDocs.map((d) => (
-                  <li
-                    key={d.id}
-                    className={`border bg-[var(--surface-2)] p-3 flex items-start gap-3 transition ${
-                      selected.has(d.id)
-                        ? "border-[var(--accent)]"
-                        : "border-[var(--line)]"
-                    }`}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={selected.has(d.id)}
-                      onChange={() => toggleSelect(d.id)}
-                      className="accent-[var(--accent)] mt-1 shrink-0"
-                      aria-label={`select ${d.filename}`}
-                    />
-                    <div className="min-w-0 flex-1">
-                      <div className="truncate font-medium text-sm">{d.filename}</div>
-                      <div className="mt-1 text-xs text-[var(--muted)] flex items-center gap-2 font-mono">
-                        <StatusDot status={d.status} />
-                        <span>{statusLabel(d.status, t)}</span>
-                        <span>·</span>
-                        <span>{formatSize(d.byte_size)}</span>
-                        <span>·</span>
-                        <span>{new Date(d.created_at).toLocaleDateString()}</span>
-                      </div>
-                      <DocTagEditor
-                        docId={d.id}
-                        brandId={brandId}
-                        tags={d.tags ?? []}
-                      />
-                      {d.error_message && (
-                        <div className="mt-1 text-xs text-red-400 break-words">{d.error_message}</div>
-                      )}
-                    </div>
-                    <button
-                      onClick={() => handleDelete(d.id)}
-                      className="text-[var(--muted)] hover:text-red-400 shrink-0"
-                      aria-label="delete"
-                    >
-                      ✕
-                    </button>
-                  </li>
-                ))}
-              </ul>
+              <>
+                {userDocs.length > 0 && (
+                  <DocSection
+                    title="📄 你上傳的文件"
+                    count={userDocs.length}
+                    docs={userDocs}
+                    brandId={brandId}
+                    selected={selected}
+                    toggleSelect={toggleSelect}
+                    handleDelete={handleDelete}
+                    t={t}
+                  />
+                )}
+                {autoDocs.length > 0 && (
+                  <DocSection
+                    title="🤖 自動爬取（BRAIN 分析來源）"
+                    count={autoDocs.length}
+                    docs={autoDocs}
+                    brandId={brandId}
+                    selected={selected}
+                    toggleSelect={toggleSelect}
+                    handleDelete={handleDelete}
+                    t={t}
+                    collapsible
+                  />
+                )}
+              </>
             )}
           </div>
         )}
@@ -439,6 +427,97 @@ export function DataView({ brandId, documents }: { brandId: string; documents: D
         ))}
       </div>
     </>
+  );
+}
+
+function DocSection({
+  title,
+  count,
+  docs,
+  brandId,
+  selected,
+  toggleSelect,
+  handleDelete,
+  t,
+  collapsible = false,
+}: {
+  title: string;
+  count: number;
+  docs: Doc[];
+  brandId: string;
+  selected: Set<string>;
+  toggleSelect: (id: string) => void;
+  handleDelete: (id: string) => void;
+  t: ReturnType<typeof useI18n>["t"];
+  collapsible?: boolean;
+}) {
+  const [collapsed, setCollapsed] = useState(collapsible);
+  return (
+    <div className="space-y-2">
+      <button
+        type="button"
+        onClick={() => collapsible && setCollapsed((v) => !v)}
+        className={`w-full flex items-center justify-between px-2 py-1.5 ${
+          collapsible ? "cursor-pointer hover:bg-[var(--surface-2)]" : "cursor-default"
+        }`}
+        disabled={!collapsible}
+      >
+        <span className="font-mono text-[11px] tracking-widest text-[var(--accent)]">
+          {title} · {count}
+        </span>
+        {collapsible && (
+          <span className="text-[var(--muted)] text-xs">{collapsed ? "▼" : "▲"}</span>
+        )}
+      </button>
+      {!collapsed && (
+        <ul className="space-y-2">
+          {docs.map((d) => (
+            <li
+              key={d.id}
+              className={`border bg-[var(--surface-2)] p-3 flex items-start gap-3 transition ${
+                selected.has(d.id)
+                  ? "border-[var(--accent)]"
+                  : "border-[var(--line)]"
+              }`}
+            >
+              <input
+                type="checkbox"
+                checked={selected.has(d.id)}
+                onChange={() => toggleSelect(d.id)}
+                className="accent-[var(--accent)] mt-1 shrink-0"
+                aria-label={`select ${d.filename}`}
+              />
+              <div className="min-w-0 flex-1">
+                <div className="truncate font-medium text-sm">{d.filename}</div>
+                <div className="mt-1 text-xs text-[var(--muted)] flex items-center gap-2 font-mono">
+                  <StatusDot status={d.status} />
+                  <span>{statusLabel(d.status, t)}</span>
+                  <span>·</span>
+                  <span>{formatSize(d.byte_size)}</span>
+                  <span>·</span>
+                  <span>{new Date(d.created_at).toLocaleDateString()}</span>
+                </div>
+                <DocTagEditor
+                  docId={d.id}
+                  brandId={brandId}
+                  tags={d.tags ?? []}
+                />
+                {d.error_message && (
+                  <div className="mt-1 text-xs text-red-400 break-words">{d.error_message}</div>
+                )}
+              </div>
+              <button
+                onClick={() => handleDelete(d.id)}
+                className="text-[var(--muted)] hover:text-red-400 shrink-0"
+                aria-label="delete"
+              >
+                ✕
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }
 
