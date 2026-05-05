@@ -157,13 +157,23 @@ export async function findPostIdByUrl(
   return match?.id ?? null;
 }
 
+async function getContainerStatus(
+  containerId: string,
+  token: string
+): Promise<string> {
+  const params = new URLSearchParams({ fields: "status", access_token: token });
+  const res = await fetch(`${GRAPH_BASE}/v1.0/${containerId}?${params.toString()}`);
+  if (!res.ok) return "UNKNOWN";
+  const json = (await res.json()) as { status?: string };
+  return json.status ?? "UNKNOWN";
+}
+
 export async function createReply(
   userId: string,
   token: string,
   text: string,
   replyToId: string
 ): Promise<{ id: string }> {
-  // Step 1: create media container
   const createParams = new URLSearchParams({
     media_type: "TEXT",
     text,
@@ -180,7 +190,15 @@ export async function createReply(
   }
   const { id: creationId } = (await createRes.json()) as { id: string };
 
-  // Step 2: publish
+  for (let i = 0; i < 10; i++) {
+    await new Promise((r) => setTimeout(r, 2000));
+    const status = await getContainerStatus(creationId, token);
+    if (status === "FINISHED") break;
+    if (status === "ERROR" || status === "EXPIRED") {
+      throw new Error(`container status ${status}`);
+    }
+  }
+
   const publishParams = new URLSearchParams({
     creation_id: creationId,
     access_token: token,
