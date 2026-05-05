@@ -1,7 +1,13 @@
 "use client";
 
 import { useActionState, useState } from "react";
-import { searchThreads, disconnectThreads, type ThreadsSearchState } from "./actions";
+import {
+  searchThreads,
+  disconnectThreads,
+  postThreadsReply,
+  type ThreadsSearchState,
+  type ThreadsReplyState,
+} from "./actions";
 import { useI18n } from "@/lib/i18n/provider";
 
 type Connection = {
@@ -177,7 +183,66 @@ export function ThreadsSection({
           )}
         </div>
       )}
+
+      <DirectReplyForm brandId={brandId} />
     </div>
+  );
+}
+
+function DirectReplyForm({ brandId }: { brandId: string }) {
+  const [state, action, pending] = useActionState<ThreadsReplyState, FormData>(
+    postThreadsReply,
+    undefined
+  );
+
+  return (
+    <form
+      action={action}
+      className="border-t border-[var(--line)] pt-4 space-y-3"
+    >
+      <div className="font-mono text-xs tracking-widest text-[var(--accent)]">
+        📤 直接發送回覆 (Beta)
+      </div>
+      <p className="text-xs text-[var(--muted)] leading-relaxed">
+        貼上你自己 Threads 貼文網址，輸入回覆內容，直接以連接帳號發送。
+        （非自己的貼文需 keyword_search 權限，待 Meta App Review 通過。）
+      </p>
+      <input type="hidden" name="brandId" value={brandId} />
+      <input
+        name="url"
+        type="url"
+        required
+        placeholder="https://www.threads.com/@xxx/post/..."
+        className="w-full border border-[var(--line)] bg-[var(--surface-2)] px-3 py-2 text-sm focus:border-[var(--accent)] focus:outline-none"
+      />
+      <textarea
+        name="text"
+        required
+        rows={3}
+        maxLength={500}
+        placeholder="輸入回覆內容..."
+        className="w-full border border-[var(--line)] bg-[var(--surface-2)] px-3 py-2 text-sm focus:border-[var(--accent)] focus:outline-none leading-relaxed"
+      />
+      {state && "error" in state && state.error && (
+        <p className="text-xs text-red-400">{state.error}</p>
+      )}
+      {state && "success" in state && state.success && (
+        <p className="text-xs text-[var(--accent)]">✓ 回覆已發送 (id: {state.replyId})</p>
+      )}
+      <button
+        type="submit"
+        disabled={pending}
+        className="bg-[var(--accent)] px-4 py-2 text-xs font-bold tracking-wide text-[var(--background)] hover:bg-[var(--accent-glow)] transition disabled:opacity-50 inline-flex items-center gap-1.5"
+      >
+        {pending ? (
+          <>
+            <span className="spinner" /> 發送中
+          </>
+        ) : (
+          "📤 發送回覆"
+        )}
+      </button>
+    </form>
   );
 }
 

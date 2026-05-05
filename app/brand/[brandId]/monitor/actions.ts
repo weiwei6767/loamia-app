@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { generateMonitorReplies } from "@/lib/ai/creative";
-import { keywordSearch, createReply, type ThreadsPost } from "@/lib/threads/api";
+import { keywordSearch, createReply, findPostIdByUrl, type ThreadsPost } from "@/lib/threads/api";
 
 export type MonitorState =
   | undefined
@@ -124,9 +124,9 @@ export async function postThreadsReply(
 ): Promise<ThreadsReplyState> {
   const brandId = String(formData.get("brandId") ?? "");
   const text = String(formData.get("text") ?? "").trim();
-  const replyToId = String(formData.get("replyToId") ?? "").trim();
+  const url = String(formData.get("url") ?? "").trim();
 
-  if (!brandId || !text || !replyToId) return { error: "missing fields" };
+  if (!brandId || !text || !url) return { error: "missing fields" };
 
   const supabase = await createClient();
   const { data: conn } = await supabase
@@ -140,6 +140,10 @@ export async function postThreadsReply(
   }
 
   try {
+    const replyToId = await findPostIdByUrl(conn.platform_user_id, conn.access_token, url);
+    if (!replyToId) {
+      return { error: "找不到此貼文（必須是你連接帳號的貼文）" };
+    }
     const result = await createReply(
       conn.platform_user_id,
       conn.access_token,

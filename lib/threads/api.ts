@@ -119,6 +119,44 @@ export async function keywordSearch(
   return json.data ?? [];
 }
 
+type MyThreadsPost = {
+  id: string;
+  permalink?: string;
+  text?: string;
+  timestamp?: string;
+};
+
+export async function listMyThreads(
+  userId: string,
+  token: string,
+  limit = 25
+): Promise<MyThreadsPost[]> {
+  const params = new URLSearchParams({
+    fields: "id,permalink,text,timestamp",
+    limit: String(limit),
+    access_token: token,
+  });
+  const res = await fetch(`${GRAPH_BASE}/v1.0/${userId}/threads?${params.toString()}`);
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(`listMyThreads failed: ${res.status} ${err}`);
+  }
+  const json = (await res.json()) as { data: MyThreadsPost[] };
+  return json.data ?? [];
+}
+
+export async function findPostIdByUrl(
+  userId: string,
+  token: string,
+  url: string
+): Promise<string | null> {
+  const shortcode = url.match(/\/post\/([A-Za-z0-9_-]+)/)?.[1];
+  if (!shortcode) return null;
+  const posts = await listMyThreads(userId, token, 50);
+  const match = posts.find((p) => p.permalink?.includes(`/post/${shortcode}`));
+  return match?.id ?? null;
+}
+
 export async function createReply(
   userId: string,
   token: string,
