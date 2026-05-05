@@ -5,6 +5,9 @@ const GRAPH_BASE = "https://graph.threads.net";
 
 export const THREADS_SCOPES = [
   "threads_basic",
+  "threads_keyword_search",
+  "threads_manage_replies",
+  "threads_content_publish",
 ].join(",");
 
 export function buildAuthorizeUrl(state: string): string {
