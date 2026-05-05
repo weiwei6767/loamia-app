@@ -67,6 +67,12 @@ export default async function DataPage({
                 {t("reports.chat")}
               </Link>
               <Link
+                href={`/brand/${brand.id}/brain`}
+                className="px-3 py-1.5 text-[var(--muted)] hover:text-[var(--foreground)]"
+              >
+                BRAIN
+              </Link>
+              <Link
                 href={`/brand/${brand.id}/data`}
                 className="px-3 py-1.5 border-b-2 border-[var(--accent)] text-[var(--accent)]"
               >
