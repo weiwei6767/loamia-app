@@ -68,77 +68,7 @@ export default async function MonitorPage({
   }));
 
   return (
-    <main className="min-h-screen flex flex-col">
-      <header className="border-b border-[var(--line)]">
-        <div className="mx-auto max-w-5xl flex items-center justify-between px-4 md:px-6 py-4 gap-4">
-          <div className="flex items-center gap-4 min-w-0">
-            <Link
-              href="/dashboard"
-              className="text-xs text-[var(--muted)] hover:text-[var(--foreground)] shrink-0"
-            >
-              {t("brand.back")}
-            </Link>
-            <div className="min-w-0">
-              <div className="text-xs font-mono tracking-widest text-[var(--accent)]">
-                {t("brand.label")}
-              </div>
-              <h1 className="text-lg font-bold truncate">{brand.name}</h1>
-            </div>
-          </div>
-          <div className="flex items-center gap-3">
-            <nav className="flex items-center gap-1 text-xs font-mono">
-              <Link
-                href={`/brand/${brand.id}`}
-                className="px-3 py-1.5 text-[var(--muted)] hover:text-[var(--foreground)]"
-              >
-                {t("reports.chat")}
-              </Link>
-              <Link
-                href={`/brand/${brand.id}/brain`}
-                className="px-3 py-1.5 text-[var(--muted)] hover:text-[var(--foreground)]"
-              >
-                BRAIN
-              </Link>
-              <Link
-                href={`/brand/${brand.id}/data`}
-                className="px-3 py-1.5 text-[var(--muted)] hover:text-[var(--foreground)]"
-              >
-                {t("data.nav")}
-              </Link>
-              <Link
-                href={`/brand/${brand.id}/content`}
-                className="px-3 py-1.5 text-[var(--muted)] hover:text-[var(--foreground)]"
-              >
-                {t("content.nav")}
-              </Link>
-              <Link
-                href={`/brand/${brand.id}/monitor`}
-                className="px-3 py-1.5 border-b-2 border-[var(--accent)] text-[var(--accent)]"
-              >
-                {t("monitor.nav")}
-              </Link>
-              <Link
-                href={`/brand/${brand.id}/schedule`}
-                className="px-3 py-1.5 text-[var(--muted)] hover:text-[var(--foreground)]"
-              >
-                SCHEDULE
-              </Link>
-              <Link
-                href={`/brand/${brand.id}/reports`}
-                className="px-3 py-1.5 text-[var(--muted)] hover:text-[var(--foreground)]"
-              >
-                {t("reports.nav")}
-              </Link>
-            </nav>
-            <BrandStatusToggle
-              brandId={brand.id}
-              status={brand.status as "active" | "archived"}
-            />
-          </div>
-        </div>
-      </header>
-
-      <section className="mx-auto max-w-5xl w-full px-4 md:px-6 py-10 space-y-8">
+    <div className="mx-auto max-w-5xl w-full px-4 md:px-6 py-8 space-y-8">
         <div>
           <div className="font-mono text-xs tracking-widest text-[var(--accent)]">
             {t("monitor.nav")} · {brand.name.toUpperCase()}
@@ -159,7 +89,6 @@ export default async function MonitorPage({
               : null
           }
         />
-      </section>
-    </main>
+    </div>
   );
 }

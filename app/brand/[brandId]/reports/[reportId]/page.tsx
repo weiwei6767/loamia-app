@@ -92,9 +92,9 @@ export default async function ReportDetailPage({
       : null;
 
   return (
-    <main className="min-h-screen flex flex-col">
+    <div className="flex flex-col">
       <header className="border-b border-[var(--line)] no-print">
-        <div className="mx-auto max-w-3xl flex items-center justify-between px-4 md:px-6 py-4 gap-4 flex-wrap">
+        <div className="mx-auto max-w-3xl flex items-center justify-between px-4 md:px-6 py-3 gap-4 flex-wrap">
           <Link
             href={`/brand/${brand.id}/reports`}
             className="text-xs text-[var(--muted)] hover:text-[var(--foreground)]"
@@ -116,7 +116,7 @@ export default async function ReportDetailPage({
         </div>
       </header>
 
-      <div style={containerStyle} className="flex-1">
+      <div style={containerStyle}>
         {isHtml ? (
           <div className="mx-auto max-w-4xl w-full px-2 md:px-4 py-6">
             <div
@@ -192,6 +192,6 @@ export default async function ReportDetailPage({
           </article>
         )}
       </div>
-    </main>
+    </div>
   );
 }
