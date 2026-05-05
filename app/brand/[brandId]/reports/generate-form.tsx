@@ -101,11 +101,11 @@ export function GenerateForm({
     setVisionMsg(null);
     const file = visionFileRef.current?.files?.[0];
     if (!file) {
-      setVisionMsg({ kind: "err", text: "請選擇圖片" });
+      setVisionMsg({ kind: "err", text: t("reports.vision.error.no_image") });
       return;
     }
     if (!visionName.trim()) {
-      setVisionMsg({ kind: "err", text: "請輸入風格名稱" });
+      setVisionMsg({ kind: "err", text: t("reports.vision.error.no_name") });
       return;
     }
     setVisionPending(true);
@@ -132,7 +132,7 @@ export function GenerateForm({
   async function handleSavePreset() {
     setPresetMsg(null);
     if (!presetName.trim()) {
-      setPresetMsg({ kind: "err", text: "請輸入模板名稱" });
+      setPresetMsg({ kind: "err", text: t("reports.template.error.no_name") });
       return;
     }
     setPresetPending(true);
@@ -561,7 +561,7 @@ export function GenerateForm({
 
       {pending && (
         <p className="text-xs text-[var(--muted)]">
-          (生成需要 30 秒到 2 分鐘，請耐心等待)
+          {t("reports.generating.note")}
         </p>
       )}
     </form>
@@ -755,7 +755,7 @@ function ManageTemplates({
         onClick={() => setOpen((v) => !v)}
         className="text-xs text-[var(--muted)] hover:text-[var(--foreground)] underline"
       >
-        {open ? t("reports.template.cancel") : "管理"}
+        {open ? t("reports.template.cancel") : t("common.manage")}
       </button>
       {open && (
         <ul className="w-full mt-2 space-y-1">
@@ -881,7 +881,7 @@ function Picker({
           onClick={() => setShowUpload((v) => !v)}
           className="text-xs text-[var(--accent)] hover:underline"
         >
-          {showUpload ? "× 收起上傳" : `+ ${t("reports.select.upload")}`}
+          {showUpload ? t("reports.upload.collapse") : `+ ${t("reports.select.upload")}`}
         </button>
         {showUpload && (
           <div className="mt-3 p-3 bg-[var(--surface-2)] border border-[var(--line)]">

@@ -137,7 +137,7 @@ export function DataView({ brandId, documents }: { brandId: string; documents: D
   }
 
   function handleDelete(docId: string) {
-    if (!confirm("確定刪除這個文件？")) return;
+    if (!confirm(t("data.delete.confirm"))) return;
     startTransition(() => deleteDocument(docId, brandId));
   }
 

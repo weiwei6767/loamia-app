@@ -383,7 +383,7 @@ function HistoryCard({
                 }}
                 className="text-xs px-3 py-1.5 border border-[var(--line)] text-[var(--muted)] hover:border-red-400 hover:text-red-400 transition disabled:opacity-50"
               >
-                ✕ {pending ? "..." : "刪除"}
+                ✕ {pending ? "..." : t("common.delete")}
               </button>
             </div>
           </div>
@@ -454,7 +454,7 @@ function ToastItem({ toast, onDismiss }: { toast: Toast; onDismiss: () => void }
             }`}
           >
             {isError
-              ? `✕ ${toast.error ?? "失敗"}`
+              ? `✕ ${toast.error ?? t("common.failed")}`
               : isDone
                 ? `✓ ${t("content.toast.success")}`
                 : `↻ ${t("content.generating")}`}
