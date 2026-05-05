@@ -13,11 +13,20 @@ export type Citation = {
   similarity: number;
 };
 
+type ToolEvent = {
+  id: string;
+  name: string;
+  status: "running" | "done";
+  input?: unknown;
+  result?: unknown;
+};
+
 type Message = {
   id?: string;
   role: "user" | "assistant";
   content: string;
   citations?: Citation[];
+  toolEvents?: ToolEvent[];
 };
 
 type StoredCitation = {
@@ -143,6 +152,29 @@ export function Chat({
               };
               return copy;
             });
+          } else if (evt.type === "tool_call_start") {
+            const id = evt.id as string;
+            const name = evt.name as string;
+            setMessages((m) => {
+              const copy = [...m];
+              const last = copy[copy.length - 1];
+              const events = [...(last.toolEvents ?? []), { id, name, status: "running" as const }];
+              copy[copy.length - 1] = { ...last, toolEvents: events };
+              return copy;
+            });
+          } else if (evt.type === "tool_result") {
+            const id = evt.id as string;
+            const input = evt.input;
+            const result = evt.result;
+            setMessages((m) => {
+              const copy = [...m];
+              const last = copy[copy.length - 1];
+              const events = (last.toolEvents ?? []).map((e) =>
+                e.id === id ? { ...e, status: "done" as const, input, result } : e
+              );
+              copy[copy.length - 1] = { ...last, toolEvents: events };
+              return copy;
+            });
           } else if (evt.type === "error") {
             throw new Error((evt.message as string) || "stream error");
           }
@@ -182,25 +214,37 @@ export function Chat({
         {messages.map((m, i) => {
           const isUser = m.role === "user";
           const isLastAssistant = !isUser && i === messages.length - 1;
-          const showThinking = pending && isLastAssistant && !m.content;
+          const hasToolEvents = (m.toolEvents?.length ?? 0) > 0;
+          const showThinking = pending && isLastAssistant && !m.content && !hasToolEvents;
+          const hasContent = m.content || showThinking;
           return (
             <div key={m.id ?? i} className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
               <div className={`max-w-[88%] ${isUser ? "" : "w-full"}`}>
-                <div
-                  className={`whitespace-pre-wrap text-sm leading-relaxed px-4 py-3 ${
-                    isUser
-                      ? "bg-[var(--accent)] text-[var(--background)] font-medium"
-                      : "bg-[var(--surface)] border border-[var(--line)]"
-                  }`}
-                >
-                  {showThinking ? (
-                    <span className="inline-flex items-center gap-2 text-[var(--muted)]">
-                      <span className="spinner" /> {t("chat.thinking")}
-                    </span>
-                  ) : (
-                    m.content
-                  )}
-                </div>
+                {hasContent && (
+                  <div
+                    className={`whitespace-pre-wrap text-sm leading-relaxed px-4 py-3 ${
+                      isUser
+                        ? "bg-[var(--accent)] text-[var(--background)] font-medium"
+                        : "bg-[var(--surface)] border border-[var(--line)]"
+                    }`}
+                  >
+                    {showThinking ? (
+                      <span className="inline-flex items-center gap-2 text-[var(--muted)]">
+                        <span className="spinner" /> {t("chat.thinking")}
+                      </span>
+                    ) : (
+                      m.content
+                    )}
+                  </div>
+                )}
+
+                {!isUser && m.toolEvents && m.toolEvents.length > 0 && (
+                  <div className="mt-2 space-y-2">
+                    {m.toolEvents.map((te) => (
+                      <ToolEventCard key={te.id} event={te} />
+                    ))}
+                  </div>
+                )}
 
                 {!isUser && m.citations && m.citations.length > 0 && (
                   <div className="mt-2 flex flex-wrap gap-1.5">
@@ -242,6 +286,58 @@ export function Chat({
       </form>
 
       <CitationModal citation={openCitation} onClose={() => setOpenCitation(null)} />
+    </div>
+  );
+}
+
+function ToolEventCard({ event }: { event: ToolEvent }) {
+  const isReport = event.name === "generate_report";
+  const isRunning = event.status === "running";
+  const result = event.result as
+    | { ok: true; reportId: string; title: string; link: string }
+    | { ok: false; error: string }
+    | undefined;
+  const success = result && "ok" in result && result.ok;
+  const errorMsg = result && "ok" in result && !result.ok ? result.error : null;
+
+  const label = isReport
+    ? isRunning
+      ? "🔧 正在生成結案報表..."
+      : success
+        ? "✓ 結案報表已生成"
+        : "✕ 報表生成失敗"
+    : event.name;
+
+  return (
+    <div
+      className={`border p-3 text-xs ${
+        isRunning
+          ? "border-[var(--accent)]/40 bg-[var(--accent)]/5"
+          : success
+            ? "border-[var(--accent)] bg-[var(--surface-2)]"
+            : "border-red-400/40 bg-red-400/5"
+      }`}
+    >
+      <div className="flex items-center gap-2 font-mono tracking-wide">
+        {isRunning && <span className="spinner" />}
+        <span className={success ? "text-[var(--accent)]" : isRunning ? "text-[var(--accent)]" : "text-red-400"}>
+          {label}
+        </span>
+      </div>
+      {isReport && success && (
+        <div className="mt-2 space-y-1">
+          <div className="text-sm font-bold">{(result as { title: string }).title}</div>
+          <a
+            href={(result as { link: string }).link}
+            className="inline-block text-xs px-3 py-1.5 mt-1 border border-[var(--accent)] text-[var(--accent)] hover:bg-[var(--accent)] hover:text-[var(--background)] transition"
+          >
+            → 查看報表
+          </a>
+        </div>
+      )}
+      {errorMsg && (
+        <div className="mt-1 text-xs text-red-400 whitespace-pre-wrap">{errorMsg}</div>
+      )}
     </div>
   );
 }

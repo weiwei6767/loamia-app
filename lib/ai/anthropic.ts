@@ -3,7 +3,9 @@ type ImageBlock = {
   source: { type: "base64"; media_type: string; data: string };
 };
 type TextBlock = { type: "text"; text: string };
-type ContentBlock = ImageBlock | TextBlock;
+type ToolUseBlock = { type: "tool_use"; id: string; name: string; input: unknown };
+type ToolResultBlock = { type: "tool_result"; tool_use_id: string; content: string };
+type ContentBlock = ImageBlock | TextBlock | ToolUseBlock | ToolResultBlock;
 
 type Message = {
   role: "user" | "assistant";
@@ -14,22 +16,45 @@ type CreateResponse = {
   content: { type: string; text?: string }[];
 };
 
+type ToolDef = {
+  name: string;
+  description: string;
+  input_schema: unknown;
+};
+
+type StreamEvent = {
+  type: string;
+  index?: number;
+  content_block?: { type: string; id?: string; name?: string; text?: string; input?: unknown };
+  delta?: {
+    type: string;
+    text?: string;
+    partial_json?: string;
+  };
+  [k: string]: unknown;
+};
+
+type Stream = AsyncIterable<StreamEvent> & {
+  finalMessage(): Promise<{
+    content: ContentBlock[];
+    stop_reason: string | null;
+  }>;
+};
+
 type AnthropicClient = {
   messages: {
     stream(args: {
       model: string;
       max_tokens: number;
-      system: string;
-      messages: { role: "user" | "assistant"; content: string }[];
-    }): AsyncIterable<{
-      type: string;
-      delta?: { type: string; text?: string };
-      [k: string]: unknown;
-    }>;
+      system?: string;
+      messages: Message[];
+      tools?: ToolDef[];
+    }): Stream;
     create(args: {
       model: string;
       max_tokens: number;
       messages: Message[];
+      tools?: ToolDef[];
     }): Promise<CreateResponse>;
   };
 };
