@@ -2,7 +2,15 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { anthropic, CHAT_MODEL } from "@/lib/ai/anthropic";
 import { retrieveContext, buildSystemPrompt, type Citation } from "@/lib/ai/rag";
-import { CHAT_TOOLS, executeGenerateReport, type ReportToolInput } from "@/lib/ai/tools";
+import {
+  CHAT_TOOLS,
+  executeGenerateReport,
+  executeGenerateContent,
+  executeGenerateReplySuggestions,
+  type ReportToolInput,
+  type ContentToolInput,
+  type ReplyToolInput,
+} from "@/lib/ai/tools";
 import { revalidatePath } from "next/cache";
 
 export const runtime = "nodejs";
@@ -189,13 +197,26 @@ export async function POST(req: NextRequest) {
           for (const tu of toolUses) {
             let resultPayload: unknown;
             if (tu.name === "generate_report") {
-              const r = await executeGenerateReport(
+              resultPayload = await executeGenerateReport(
                 supabase,
                 brand,
                 user.id,
                 tu.input as ReportToolInput
               );
-              resultPayload = r;
+            } else if (tu.name === "generate_content") {
+              resultPayload = await executeGenerateContent(
+                supabase,
+                brand,
+                user.id,
+                tu.input as ContentToolInput
+              );
+            } else if (tu.name === "generate_reply_suggestions") {
+              resultPayload = await executeGenerateReplySuggestions(
+                supabase,
+                brand,
+                user.id,
+                tu.input as ReplyToolInput
+              );
             } else {
               resultPayload = { ok: false, error: `unknown tool: ${tu.name}` };
             }
@@ -238,10 +259,11 @@ export async function POST(req: NextRequest) {
           .select("id")
           .single();
 
-        // Revalidate reports page if any reports were generated
-        if (toolEventsForPersistence.some((e) => e.name === "generate_report")) {
-          revalidatePath(`/brand/${brandId}/reports`);
-        }
+        // Revalidate sub-pages based on what tools fired
+        const usedTools = new Set(toolEventsForPersistence.map((e) => e.name));
+        if (usedTools.has("generate_report")) revalidatePath(`/brand/${brandId}/reports`);
+        if (usedTools.has("generate_content")) revalidatePath(`/brand/${brandId}/content`);
+        if (usedTools.has("generate_reply_suggestions")) revalidatePath(`/brand/${brandId}/monitor`);
 
         controller.enqueue(
           ndjson({

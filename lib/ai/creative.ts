@@ -1,6 +1,8 @@
 import "server-only";
 import { anthropic, CHAT_MODEL } from "./anthropic";
 import { retrieveRelevantChunks } from "./report";
+import { createClient } from "@/lib/supabase/server";
+import { assembleBrandBrainContext, formatBrandBrainPrompt } from "./brand-brain";
 
 export type ContentType =
   | "ig_post"
@@ -59,6 +61,11 @@ export async function generateContentVariants(
       ? "（沒有找到相關歷史資料；憑借品牌名稱與使用者要求生成，避免具體數字捏造）"
       : chunks.map((c, i) => `[${i + 1}] ${c.content}`).join("\n\n");
 
+  // Brand Brain — three-layer memory
+  const supabase = await createClient();
+  const brainCtx = await assembleBrandBrainContext(supabase, brandId, "caption");
+  const brainBlock = brainCtx ? formatBrandBrainPrompt(brainCtx) : "";
+
   const typeHint = CONTENT_TYPE_HINTS[type].zh;
   const audienceLine = audience.trim() ? `\n\n## 目標受眾\n${audience.trim()}` : "";
 
@@ -70,6 +77,7 @@ ${typeHint}
 ## 使用者需求
 ${prompt.trim()}${audienceLine}
 
+${brainBlock ? `# Brand Brain\n${brainBlock}\n` : ""}
 ## 品牌風格參考（從歷史資料推測，不一定要直接引用）
 ${contextBlock}
 
@@ -78,7 +86,7 @@ ${contextBlock}
 2. 產出**3 個獨立變體**，每個都可直接使用
 3. **每個變體之間用 \`${VARIANT_SEPARATOR}\` 分隔**（單獨一行）
 4. 變體之間應該有差異（角度、長度、語氣不同）
-5. 風格要呼應品牌歷史調性
+5. 風格要呼應品牌歷史調性 + 遵守 Brand Identity 的禁忌詞
 6. 數字 / 事實只能來自上方資料；資料中沒有的避免具體數字
 7. 不要編號、不要前言「以下是三個版本」這類，直接給文案內容`;
 
@@ -125,26 +133,34 @@ export async function generateMonitorReplies(
       ? "（沒有歷史風格參考；以一般品牌客服語氣處理）"
       : chunks.map((c, i) => `[${i + 1}] ${c.content}`).join("\n\n");
 
+  // Brand Brain — three-layer memory
+  const supabase = await createClient();
+  const brainCtx = await assembleBrandBrainContext(supabase, brandId, "reply");
+  const brainBlock = brainCtx ? formatBrandBrainPrompt(brainCtx) : "";
+
   const toneLine = tone.trim() ? `\n## 期望語氣\n${tone.trim()}` : "";
   const sourceLine = sourceType.trim() ? `（來源：${sourceType}）` : "";
 
-  const systemPrompt = `你是 Loamia 的 AI 社群回覆助理，協助「${brandName}」產出符合品牌風格的回覆建議。
+  const systemPrompt = `你是 Loamia 的 AI Engagement Engine，協助「${brandName}」產出符合品牌風格的回覆建議。
 
 ## 待回覆內容${sourceLine}
 ${sourceText.trim()}
 ${toneLine}
 
-## 品牌歷史風格參考
+${brainBlock ? `# Brand Brain\n${brainBlock}\n` : ""}
+## 品牌歷史片段參考
 ${contextBlock}
 
 ## 規則
 1. 用繁體中文
-2. 產出**3 個回覆建議**，**每個用 \`${REPLY_SEPARATOR}\` 分隔**（單獨一行）
-3. 三個建議要有差異（短/中/長 或 不同角度：感謝 / 說明 / 引導）
-4. 直接給**可發布的文字**，不要前言「以下是建議：」這類
-5. 風格呼應品牌歷史貼文/客服調性
-6. 不可承諾品牌做不到的事
-7. 不可洩漏內部資訊`;
+2. 產出**剛好 3 個版本**（v6 計畫書 Engagement Engine 三種版本），**用 \`${REPLY_SEPARATOR}\` 分隔**（單獨一行）：
+   - 版本 1【自然分享版】：像朋友隨意回應，自然親切，不推銷
+   - 版本 2【專業解答版】：以品牌專業角度解答疑慮或提供實質資訊
+   - 版本 3【輕推 CTA 版】：自然帶到品牌服務／產品，但不強迫，留給對方主動權
+3. 直接給**可發布的文字**，不要前言「以下是建議：」這類；不要在回覆內標註「自然分享版」這類字
+4. 必須遵守 Brand Identity 的禁忌詞與調性
+5. 若 Winning Memory 中有類似情境的成功範例，**參考其結構與語氣**（不是直接複製）
+6. 不可承諾品牌做不到的事；不可洩漏內部資訊`;
 
   const client = await anthropic();
   const response = await client.messages.stream({

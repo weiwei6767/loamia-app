@@ -13,6 +13,11 @@ type MonitorRow = {
   suggestions: string[];
   threads_url: string | null;
   created_at: string;
+  picked_index: number | null;
+  sent_text: string | null;
+  sent_at: string | null;
+  sent_platform: string | null;
+  outcome: string | null;
 };
 
 export default async function MonitorPage({
@@ -35,7 +40,7 @@ export default async function MonitorPage({
   const [{ data: rows }, { data: connection }] = await Promise.all([
     supabase
       .from("monitor_replies")
-      .select("id, source_text, source_type, tone, suggestions, threads_url, created_at")
+      .select("id, source_text, source_type, tone, suggestions, threads_url, created_at, picked_index, sent_text, sent_at, sent_platform, outcome")
       .eq("brand_id", brand.id)
       .order("created_at", { ascending: false }),
     supabase
@@ -55,6 +60,11 @@ export default async function MonitorPage({
     suggestions: (r.suggestions as string[] | null) ?? [],
     threads_url: (r.threads_url as string | null) ?? null,
     created_at: r.created_at as string,
+    picked_index: (r.picked_index as number | null) ?? null,
+    sent_text: (r.sent_text as string | null) ?? null,
+    sent_at: (r.sent_at as string | null) ?? null,
+    sent_platform: (r.sent_platform as string | null) ?? null,
+    outcome: (r.outcome as string | null) ?? null,
   }));
 
   return (

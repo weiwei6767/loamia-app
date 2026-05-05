@@ -290,23 +290,58 @@ export function Chat({
   );
 }
 
+type ToolMeta = {
+  runningLabel: string;
+  successLabel: string;
+  failLabel: string;
+  ctaText: string;
+};
+
+const TOOL_META: Record<string, ToolMeta> = {
+  generate_report: {
+    runningLabel: "🔧 正在生成結案報表...",
+    successLabel: "✓ 結案報表已生成",
+    failLabel: "✕ 報表生成失敗",
+    ctaText: "→ 查看報表",
+  },
+  generate_content: {
+    runningLabel: "🔧 正在生成文案...",
+    successLabel: "✓ 已產出 3 個文案版本",
+    failLabel: "✕ 文案生成失敗",
+    ctaText: "→ 前往 Content Studio",
+  },
+  generate_reply_suggestions: {
+    runningLabel: "🔧 正在思考回覆建議...",
+    successLabel: "✓ 已產出 3 版回覆建議",
+    failLabel: "✕ 回覆生成失敗",
+    ctaText: "→ 前往 Coast Guard",
+  },
+};
+
 function ToolEventCard({ event }: { event: ToolEvent }) {
-  const isReport = event.name === "generate_report";
+  const meta = TOOL_META[event.name] ?? {
+    runningLabel: `🔧 ${event.name}...`,
+    successLabel: `✓ ${event.name} 完成`,
+    failLabel: `✕ ${event.name} 失敗`,
+    ctaText: "→ 查看",
+  };
   const isRunning = event.status === "running";
   const result = event.result as
-    | { ok: true; reportId: string; title: string; link: string }
+    | { ok: true; link?: string; title?: string; variants?: string[]; suggestions?: string[] }
     | { ok: false; error: string }
     | undefined;
   const success = result && "ok" in result && result.ok;
   const errorMsg = result && "ok" in result && !result.ok ? result.error : null;
+  const link = success && "link" in result ? result.link : undefined;
+  const title = success && "title" in result ? result.title : undefined;
+  const variants =
+    success && "variants" in result
+      ? result.variants
+      : success && "suggestions" in result
+        ? result.suggestions
+        : undefined;
 
-  const label = isReport
-    ? isRunning
-      ? "🔧 正在生成結案報表..."
-      : success
-        ? "✓ 結案報表已生成"
-        : "✕ 報表生成失敗"
-    : event.name;
+  const label = isRunning ? meta.runningLabel : success ? meta.successLabel : meta.failLabel;
 
   return (
     <div
@@ -320,20 +355,32 @@ function ToolEventCard({ event }: { event: ToolEvent }) {
     >
       <div className="flex items-center gap-2 font-mono tracking-wide">
         {isRunning && <span className="spinner" />}
-        <span className={success ? "text-[var(--accent)]" : isRunning ? "text-[var(--accent)]" : "text-red-400"}>
+        <span className={success || isRunning ? "text-[var(--accent)]" : "text-red-400"}>
           {label}
         </span>
       </div>
-      {isReport && success && (
-        <div className="mt-2 space-y-1">
-          <div className="text-sm font-bold">{(result as { title: string }).title}</div>
-          <a
-            href={(result as { link: string }).link}
-            className="inline-block text-xs px-3 py-1.5 mt-1 border border-[var(--accent)] text-[var(--accent)] hover:bg-[var(--accent)] hover:text-[var(--background)] transition"
-          >
-            → 查看報表
-          </a>
-        </div>
+      {success && title && (
+        <div className="mt-2 text-sm font-bold">{title}</div>
+      )}
+      {success && variants && variants.length > 0 && (
+        <ul className="mt-2 space-y-1.5">
+          {variants.slice(0, 3).map((v, i) => (
+            <li
+              key={i}
+              className="text-xs text-[var(--muted)] line-clamp-2 leading-relaxed pl-3 border-l border-[var(--line)]"
+            >
+              {v}
+            </li>
+          ))}
+        </ul>
+      )}
+      {success && link && (
+        <a
+          href={link}
+          className="inline-block text-xs px-3 py-1.5 mt-2 border border-[var(--accent)] text-[var(--accent)] hover:bg-[var(--accent)] hover:text-[var(--background)] transition"
+        >
+          {meta.ctaText}
+        </a>
       )}
       {errorMsg && (
         <div className="mt-1 text-xs text-red-400 whitespace-pre-wrap">{errorMsg}</div>

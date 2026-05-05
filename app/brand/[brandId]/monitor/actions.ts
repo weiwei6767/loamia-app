@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { generateMonitorReplies } from "@/lib/ai/creative";
 import { keywordSearch, createReply, findPostIdByUrl, type ThreadsPost } from "@/lib/threads/api";
+import { recordWinningReplyFromMonitor } from "@/lib/ai/brand-brain";
 
 export type MonitorState =
   | undefined
@@ -127,6 +128,9 @@ export async function postThreadsReply(
   const brandId = String(formData.get("brandId") ?? "");
   const text = String(formData.get("text") ?? "").trim();
   const url = String(formData.get("url") ?? "").trim();
+  const sourceReplyId = String(formData.get("sourceReplyId") ?? "").trim();
+  const pickedIndexRaw = String(formData.get("pickedIndex") ?? "").trim();
+  const pickedIndex = pickedIndexRaw ? parseInt(pickedIndexRaw, 10) : null;
 
   if (!brandId || !text || !url) return { error: "missing fields" };
 
@@ -152,8 +156,59 @@ export async function postThreadsReply(
       text,
       replyToId
     );
+
+    // Feedback Loop: log the send event back to monitor_replies if traceable
+    if (sourceReplyId) {
+      await supabase
+        .from("monitor_replies")
+        .update({
+          picked_index: pickedIndex,
+          sent_text: text,
+          sent_at: new Date().toISOString(),
+          sent_platform: "threads",
+          sent_to_id: result.id,
+        })
+        .eq("id", sourceReplyId);
+    }
+
     return { success: true, replyId: result.id };
   } catch (err) {
     return { error: err instanceof Error ? err.message : "發送失敗" };
   }
+}
+
+// Mark outcome on a sent reply (replied / ignored / converted)
+export async function markReplyOutcome(
+  replyId: string,
+  brandId: string,
+  outcome: "replied" | "ignored" | "converted",
+  note?: string
+): Promise<void> {
+  const supabase = await createClient();
+  await supabase
+    .from("monitor_replies")
+    .update({ outcome, outcome_note: note ?? null })
+    .eq("id", replyId);
+
+  // Feedback Loop → Winning Memory: convert successful replies into a brand pattern
+  if (outcome === "converted") {
+    const { data: row } = await supabase
+      .from("monitor_replies")
+      .select("id, brand_id, agency_id, sent_text, source_text, outcome, tone")
+      .eq("id", replyId)
+      .single();
+    if (row) {
+      await recordWinningReplyFromMonitor(supabase, {
+        id: row.id as string,
+        brand_id: row.brand_id as string,
+        agency_id: row.agency_id as string,
+        sent_text: (row.sent_text as string | null) ?? null,
+        source_text: (row.source_text as string | null) ?? null,
+        outcome: (row.outcome as string | null) ?? null,
+        tone: (row.tone as string | null) ?? null,
+      });
+    }
+  }
+
+  revalidatePath(`/brand/${brandId}/monitor`);
 }

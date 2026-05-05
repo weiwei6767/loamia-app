@@ -6,6 +6,7 @@ import {
   generateReplies,
   deleteMonitorReply,
   postThreadsReply,
+  markReplyOutcome,
   type MonitorState,
 } from "./actions";
 import { useI18n } from "@/lib/i18n/provider";
@@ -19,6 +20,11 @@ type MonitorRow = {
   suggestions: string[];
   threads_url: string | null;
   created_at: string;
+  picked_index: number | null;
+  sent_text: string | null;
+  sent_at: string | null;
+  sent_platform: string | null;
+  outcome: string | null;
 };
 
 type ThreadsConnection = {
@@ -349,6 +355,8 @@ function ReplyCard({
     fd.append("brandId", brandId);
     fd.append("url", row.threads_url);
     fd.append("text", reply);
+    fd.append("sourceReplyId", row.id);
+    fd.append("pickedIndex", String(active));
     const result = await postThreadsReply(undefined, fd);
     if (result && "success" in result && result.success) {
       setSendStatus("sent");
@@ -468,10 +476,72 @@ function ReplyCard({
             {sendError && (
               <p className="mt-2 text-xs text-red-400">{sendError}</p>
             )}
+
+            {row.sent_at && (
+              <FeedbackPanel
+                row={row}
+                brandId={brandId}
+              />
+            )}
           </div>
         </div>
       )}
     </li>
+  );
+}
+
+function FeedbackPanel({
+  row,
+  brandId,
+}: {
+  row: MonitorRow;
+  brandId: string;
+}) {
+  const { t } = useI18n();
+  const [pending, startTransition] = useTransition();
+  const [outcomeLocal, setOutcomeLocal] = useState<string | null>(row.outcome);
+
+  function mark(outcome: "replied" | "ignored" | "converted") {
+    setOutcomeLocal(outcome);
+    startTransition(() => markReplyOutcome(row.id, brandId, outcome));
+  }
+
+  const sentDate = row.sent_at ? new Date(row.sent_at) : null;
+  const pickedLabel =
+    row.picked_index !== null && row.picked_index !== undefined
+      ? `${t("monitor.suggestion")} ${row.picked_index + 1}`
+      : "";
+
+  return (
+    <div className="mt-3 pt-3 border-t border-[var(--line)] space-y-2">
+      <div className="text-[10px] text-[var(--muted)] font-mono">
+        ✓ {t("monitor.feedback.sent_at")} {sentDate?.toLocaleString()}
+        {pickedLabel ? ` · ${pickedLabel}` : ""}
+        {row.sent_platform ? ` · ${row.sent_platform}` : ""}
+      </div>
+      <div className="flex items-center gap-2 flex-wrap">
+        <span className="text-xs text-[var(--muted)]">{t("monitor.feedback.outcome")}：</span>
+        {(["replied", "converted", "ignored"] as const).map((o) => (
+          <button
+            key={o}
+            type="button"
+            disabled={pending}
+            onClick={() => mark(o)}
+            className={`text-xs px-2.5 py-1 border transition disabled:opacity-50 ${
+              outcomeLocal === o
+                ? o === "converted"
+                  ? "border-[var(--accent)] bg-[var(--accent)] text-[var(--background)] font-bold"
+                  : o === "replied"
+                    ? "border-blue-400 text-blue-400"
+                    : "border-[var(--muted)] text-[var(--muted)]"
+                : "border-[var(--line)] text-[var(--muted)] hover:border-[var(--accent)]/50 hover:text-[var(--foreground)]"
+            }`}
+          >
+            {t(`monitor.feedback.${o}` as never)}
+          </button>
+        ))}
+      </div>
+    </div>
   );
 }
 
