@@ -106,30 +106,46 @@ export function RightChatPanel({
         <button
           type="button"
           onClick={() => setShowList((v) => !v)}
-          className="flex-1 text-left text-[10px] font-mono tracking-widest text-[var(--muted)] hover:text-[var(--foreground)] transition flex items-center justify-between gap-2"
+          className={`flex-1 text-left text-xs flex items-center justify-between gap-2 px-3 py-1.5 border bg-[var(--surface-2)] transition ${
+            showList
+              ? "border-[var(--accent)] text-[var(--accent)]"
+              : "border-[var(--line)] text-[var(--foreground)] hover:border-[var(--accent)]/50 hover:bg-[var(--surface)]"
+          }`}
           title="切換對話歷史"
         >
-          <span className="truncate">
-            🧵 {threads.length === 0 ? "新對話" : `${threads.length} 筆對話`}
-            {currentId && threads.find((t) => t.id === currentId)?.title
-              ? ` · ${threads.find((t) => t.id === currentId)!.title.slice(0, 20)}`
-              : ""}
+          <span className="truncate flex items-center gap-1.5">
+            <span>🧵</span>
+            <span className="truncate">
+              {currentId && threads.find((t) => t.id === currentId)?.title
+                ? threads.find((t) => t.id === currentId)!.title.slice(0, 24)
+                : threads.length === 0
+                  ? "新對話"
+                  : `${threads.length} 筆對話`}
+            </span>
           </span>
-          <span className="text-[var(--muted)]">{showList ? "▲" : "▼"}</span>
+          <span
+            className={`text-[10px] shrink-0 transition-transform ${showList ? "rotate-180" : ""}`}
+            aria-hidden="true"
+          >
+            ▼
+          </span>
         </button>
         <button
           type="button"
           onClick={startNew}
-          className="text-[10px] px-2 py-1 border border-[var(--line)] text-[var(--muted)] hover:border-[var(--accent)] hover:text-[var(--accent)] transition shrink-0"
+          className="text-xs px-2.5 py-1.5 border border-[var(--accent)]/50 bg-[var(--surface-2)] text-[var(--accent)] hover:bg-[var(--accent)] hover:text-[var(--background)] transition shrink-0 font-medium"
           title="新對話"
         >
           + 新
         </button>
 
         {showList && (
-          <div className="absolute left-3 right-3 top-full mt-1 max-h-80 overflow-y-auto border border-[var(--line)] bg-[var(--surface)] shadow-2xl z-30">
+          <div className="absolute left-3 right-3 top-full mt-1.5 max-h-80 overflow-y-auto border-2 border-[var(--accent)] bg-[var(--surface)] shadow-2xl z-30">
+            <div className="sticky top-0 bg-[var(--surface)] px-3 py-1.5 border-b border-[var(--line)] font-mono text-[10px] tracking-widest text-[var(--accent)]">
+              對話歷史 · {threads.length}
+            </div>
             {threads.length === 0 ? (
-              <div className="px-3 py-3 text-xs text-[var(--muted)]">尚無對話歷史</div>
+              <div className="px-3 py-4 text-xs text-[var(--muted)] text-center">尚無對話歷史</div>
             ) : (
               <ul>
                 {threads.map((t) => (
@@ -137,11 +153,13 @@ export function RightChatPanel({
                     <button
                       type="button"
                       onClick={() => loadThread(t.id)}
-                      className={`w-full text-left px-3 py-2 text-xs hover:bg-[var(--surface-2)] transition ${
-                        t.id === currentId ? "bg-[var(--accent)]/10 text-[var(--accent)]" : ""
+                      className={`w-full text-left px-3 py-2 text-xs border-l-2 transition ${
+                        t.id === currentId
+                          ? "border-[var(--accent)] bg-[var(--accent)]/10 text-[var(--accent)]"
+                          : "border-transparent hover:bg-[var(--surface-2)] hover:border-[var(--accent)]/50"
                       }`}
                     >
-                      <div className="truncate">{t.title}</div>
+                      <div className="truncate font-medium">{t.title}</div>
                       <div className="text-[9px] text-[var(--muted)] font-mono mt-0.5">
                         {new Date(t.created_at).toLocaleString()}
                       </div>
