@@ -1,6 +1,6 @@
 import "server-only";
 
-const AUTH_BASE = "https://threads.net/oauth/authorize";
+const AUTH_BASE = "https://www.threads.net/oauth/authorize";
 const GRAPH_BASE = "https://graph.threads.net";
 
 export const THREADS_SCOPES = [
