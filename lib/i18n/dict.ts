@@ -42,6 +42,7 @@ export const dict = {
   // Brand workspace
   "brand.back": { zh: "← 返回", en: "← Back" },
   "brand.label": { zh: "品牌", en: "BRAND" },
+  "nav.overview": { zh: "總覽", en: "OVERVIEW" },
   "nav.brain": { zh: "品牌大腦", en: "BRAIN" },
   "nav.schedule": { zh: "排程", en: "SCHEDULE" },
   "nav.kol": { zh: "KOL 名單", en: "KOL" },

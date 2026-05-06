@@ -16,7 +16,7 @@ export function BrandSidebar({ brandId }: { brandId: string }) {
   const { t } = useI18n();
 
   const items: Item[] = [
-    { href: (b) => `/brand/${b}`, label: t("reports.chat"), icon: "💬", matchExact: true },
+    { href: (b) => `/brand/${b}`, label: t("nav.overview"), icon: "🏠", matchExact: true },
     { href: (b) => `/brand/${b}/brain`, label: t("nav.brain"), icon: "🧠" },
     { href: (b) => `/brand/${b}/data`, label: t("data.nav"), icon: "📁" },
     { href: (b) => `/brand/${b}/content`, label: t("content.nav"), icon: "✏️" },

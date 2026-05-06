@@ -93,7 +93,7 @@ export function ResizableSplit({
           aria-label="開啟 Brand Brain 對話"
           title="開啟 Brand Brain"
         >
-          🧠
+          💬
         </button>
       )}
 
