@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { computeNextRun, type Recurrence } from "@/lib/scheduler";
+import { generateContentVariants } from "@/lib/ai/creative";
 
 export type ScheduleState = undefined | { error: string } | { success: true };
 
@@ -104,99 +105,6 @@ export async function quickSchedulePost(
   return { ok: true };
 }
 
-// ── Bulk create (multiple posts at once) ────────────
-
-export type BulkScheduleState =
-  | undefined
-  | { error: string }
-  | { success: true; count: number };
-
-export async function bulkCreateScheduledPosts(
-  _state: BulkScheduleState,
-  formData: FormData
-): Promise<BulkScheduleState> {
-  const brandId = String(formData.get("brandId") ?? "");
-  const blob = String(formData.get("blob") ?? "").trim();
-  const tzOffsetMinutes = parseInt(String(formData.get("tzOffsetMinutes") ?? "0"), 10) || 0;
-  if (!brandId || !blob) return { error: "請貼上多筆貼文（每筆用 ===POST=== 分隔）" };
-
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { error: "未登入" };
-
-  const { data: brand } = await supabase
-    .from("brands")
-    .select("id, agency_id")
-    .eq("id", brandId)
-    .single();
-  if (!brand) return { error: "品牌不存在" };
-
-  // Format expected: each "post" block separated by ===POST===
-  // Each block has first line = ISO datetime, then post text.
-  const blocks = blob
-    .split(/\n*===POST===\n*/)
-    .map((b) => b.trim())
-    .filter(Boolean);
-  if (blocks.length === 0) return { error: "沒有解析到任何貼文" };
-
-  const rows: Array<{
-    agency_id: string;
-    brand_id: string;
-    user_id: string;
-    platform: string;
-    text: string;
-    scheduled_at: string;
-    status: string;
-  }> = [];
-  const errors: string[] = [];
-
-  blocks.forEach((block, idx) => {
-    const lines = block.split(/\r?\n/);
-    const firstLine = lines.shift()?.trim() ?? "";
-    const text = lines.join("\n").trim();
-    const parsed = new Date(firstLine);
-    if (Number.isNaN(parsed.getTime())) {
-      errors.push(`第 ${idx + 1} 筆：時間格式錯誤「${firstLine}」`);
-      return;
-    }
-    // If line has no explicit timezone (no Z, no +HH:MM), treat as user's local time
-    const hasTz = /[zZ]|[+-]\d\d:?\d\d$/.test(firstLine);
-    const dt = hasTz
-      ? parsed
-      : new Date(parsed.getTime() + tzOffsetMinutes * 60 * 1000);
-    if (!text) {
-      errors.push(`第 ${idx + 1} 筆：沒有貼文內容`);
-      return;
-    }
-    if (text.length > 500) {
-      errors.push(`第 ${idx + 1} 筆：超過 500 字`);
-      return;
-    }
-    rows.push({
-      agency_id: brand.agency_id as string,
-      brand_id: brand.id as string,
-      user_id: user.id,
-      platform: "threads",
-      text,
-      scheduled_at: dt.toISOString(),
-      status: "pending",
-    });
-  });
-
-  if (rows.length === 0) {
-    return { error: errors.join("\n") || "沒有可建立的貼文" };
-  }
-
-  const { error } = await supabase.from("scheduled_posts").insert(rows);
-  if (error) return { error: error.message };
-
-  revalidatePath(`/brand/${brandId}/schedule`);
-  if (errors.length > 0) {
-    return { error: `已建立 ${rows.length} 筆，但以下失敗：\n${errors.join("\n")}` };
-  }
-  return { success: true, count: rows.length };
-}
-
 // ── Templates (recurring) ───────────────────────────
 
 export async function createPostTemplate(
@@ -209,14 +117,31 @@ export async function createPostTemplate(
   const recurrenceRaw = String(formData.get("recurrence") ?? "");
   const weekdayRaw = String(formData.get("weekday") ?? "");
   const timeOfDay = String(formData.get("timeOfDay") ?? "").trim();
+  const intervalHoursRaw = String(formData.get("intervalHours") ?? "").trim();
   const tzOffsetMinutes = parseInt(String(formData.get("tzOffsetMinutes") ?? "0"), 10) || 0;
 
-  if (!brandId || !name || !prompt || !timeOfDay) return { error: "缺少欄位" };
-  if (!/^([01]\d|2[0-3]):([0-5]\d)$/.test(timeOfDay)) return { error: "時間格式 HH:MM" };
   const recurrence: Recurrence | null =
-    recurrenceRaw === "daily" || recurrenceRaw === "weekly" ? recurrenceRaw : null;
-  if (!recurrence) return { error: "請選擇 daily 或 weekly" };
-  const weekday = recurrence === "weekly" ? parseInt(weekdayRaw || "1", 10) : null;
+    recurrenceRaw === "daily" || recurrenceRaw === "weekly" || recurrenceRaw === "hourly"
+      ? recurrenceRaw
+      : null;
+  if (!brandId || !name || !prompt) return { error: "缺少欄位" };
+  if (!recurrence) return { error: "請選擇頻率" };
+
+  let weekday: number | null = null;
+  let intervalHours: number | null = null;
+  let timeOfDayResolved = "00:00";
+
+  if (recurrence === "hourly") {
+    const n = parseInt(intervalHoursRaw, 10);
+    if (Number.isNaN(n) || n < 1 || n > 24) return { error: "每 N 小時：N 需為 1–24" };
+    intervalHours = n;
+    timeOfDayResolved = "00:00"; // ignored for hourly but required by NOT NULL
+  } else {
+    if (!timeOfDay) return { error: "缺少時間" };
+    if (!/^([01]\d|2[0-3]):([0-5]\d)$/.test(timeOfDay)) return { error: "時間格式 HH:MM" };
+    timeOfDayResolved = timeOfDay;
+    if (recurrence === "weekly") weekday = parseInt(weekdayRaw || "1", 10);
+  }
 
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -229,7 +154,14 @@ export async function createPostTemplate(
     .single();
   if (!brand) return { error: "品牌不存在" };
 
-  const next = computeNextRun(new Date(), recurrence, timeOfDay, weekday, tzOffsetMinutes);
+  const next = computeNextRun(
+    new Date(),
+    recurrence,
+    timeOfDayResolved,
+    weekday,
+    tzOffsetMinutes,
+    intervalHours
+  );
 
   const { error } = await supabase.from("post_templates").insert({
     agency_id: brand.agency_id,
@@ -239,7 +171,8 @@ export async function createPostTemplate(
     prompt,
     recurrence,
     weekday,
-    time_of_day: timeOfDay,
+    time_of_day: timeOfDayResolved,
+    interval_hours: intervalHours,
     tz_offset_minutes: tzOffsetMinutes,
     next_run_at: next.toISOString(),
     active: true,
@@ -248,6 +181,52 @@ export async function createPostTemplate(
 
   revalidatePath(`/brand/${brandId}/schedule`);
   return { success: true };
+}
+
+// Preview what the template will produce (does NOT save)
+export type PreviewState =
+  | undefined
+  | { error: string }
+  | { success: true; preview: string };
+
+export async function previewTemplateContent(
+  _state: PreviewState,
+  formData: FormData
+): Promise<PreviewState> {
+  const templateId = String(formData.get("templateId") ?? "");
+  if (!templateId) return { error: "missing templateId" };
+
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "未登入" };
+
+  const { data: tmpl } = await supabase
+    .from("post_templates")
+    .select("brand_id, prompt")
+    .eq("id", templateId)
+    .single();
+  if (!tmpl) return { error: "找不到模板" };
+
+  const { data: brand } = await supabase
+    .from("brands")
+    .select("name")
+    .eq("id", tmpl.brand_id as string)
+    .single();
+  if (!brand) return { error: "品牌不存在" };
+
+  try {
+    const result = await generateContentVariants(
+      tmpl.brand_id as string,
+      brand.name as string,
+      "threads_post",
+      tmpl.prompt as string,
+      ""
+    );
+    const preview = (result.variants[0] ?? "").trim().slice(0, 500);
+    return { success: true, preview };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "預覽失敗" };
+  }
 }
 
 export async function toggleTemplateActive(templateId: string, active: boolean, brandId: string) {

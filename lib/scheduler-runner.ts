@@ -30,6 +30,7 @@ type TemplateRow = {
   recurrence: Recurrence;
   weekday: number | null;
   time_of_day: string;
+  interval_hours: number | null;
   tz_offset_minutes: number | null;
   next_run_at: string;
 };
@@ -51,7 +52,7 @@ export async function runScheduler(
   let tmplQuery = supabase
     .from("post_templates")
     .select(
-      "id, agency_id, brand_id, user_id, prompt, recurrence, weekday, time_of_day, tz_offset_minutes, next_run_at"
+      "id, agency_id, brand_id, user_id, prompt, recurrence, weekday, time_of_day, interval_hours, tz_offset_minutes, next_run_at"
     )
     .eq("active", true)
     .lte("next_run_at", nowIso);
@@ -96,7 +97,8 @@ export async function runScheduler(
         tmpl.recurrence,
         tmpl.time_of_day,
         tmpl.weekday,
-        tmpl.tz_offset_minutes ?? 0
+        tmpl.tz_offset_minutes ?? 0,
+        tmpl.interval_hours ?? null
       );
       await supabase
         .from("post_templates")

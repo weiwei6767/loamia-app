@@ -4,14 +4,14 @@ import { useActionState, useEffect, useRef, useState, useTransition } from "reac
 import { useRouter } from "next/navigation";
 import {
   createScheduledPost,
-  bulkCreateScheduledPosts,
   cancelScheduledPost,
   deleteScheduledPost,
   createPostTemplate,
   toggleTemplateActive,
   deletePostTemplate,
+  previewTemplateContent,
   type ScheduleState,
-  type BulkScheduleState,
+  type PreviewState,
 } from "./actions";
 
 type Post = {
@@ -29,9 +29,10 @@ type Template = {
   id: string;
   name: string;
   prompt: string;
-  recurrence: "daily" | "weekly";
+  recurrence: "daily" | "weekly" | "hourly";
   weekday: number | null;
   time_of_day: string;
+  interval_hours: number | null;
   next_run_at: string;
   active: boolean;
 };
@@ -80,7 +81,6 @@ export function ScheduleView({
       )}
 
       <SinglePostScheduler brandId={brandId} threadsUsername={threadsUsername} />
-      <BulkScheduler brandId={brandId} threadsUsername={threadsUsername} />
       <TemplateScheduler brandId={brandId} templates={templates} threadsUsername={threadsUsername} />
       <PendingList posts={pending} brandId={brandId} />
       <HistoryList posts={history} brandId={brandId} />
@@ -244,76 +244,6 @@ function SinglePostScheduler({
   );
 }
 
-function BulkScheduler({
-  brandId,
-  threadsUsername,
-}: {
-  brandId: string;
-  threadsUsername: string | null;
-}) {
-  const router = useRouter();
-  const formRef = useRef<HTMLFormElement>(null);
-  const [state, action, pending] = useActionState<BulkScheduleState, FormData>(
-    bulkCreateScheduledPosts,
-    undefined
-  );
-
-  useEffect(() => {
-    if (state && "success" in state && state.success && formRef.current) {
-      formRef.current.reset();
-      router.refresh();
-    }
-  }, [state, router]);
-
-  return (
-    <section className="border border-[var(--line)] bg-[var(--surface)] p-5 space-y-4">
-      <div>
-        <div className="font-mono text-xs tracking-widest text-[var(--accent)]">
-          2. 批次排程
-        </div>
-        <h3 className="mt-1 text-lg font-bold">一次部署多篇</h3>
-        <p className="mt-1 text-xs text-[var(--muted)] leading-relaxed">
-          每筆用 <code className="text-[var(--accent)]">===POST===</code> 分隔，每筆第一行為 ISO 時間（例 2026-05-10T09:00），其後為貼文內文。
-        </p>
-      </div>
-
-      <form ref={formRef} action={action} className="space-y-3">
-        <input type="hidden" name="brandId" value={brandId} />
-        <input
-          type="hidden"
-          name="tzOffsetMinutes"
-          value={typeof window !== "undefined" ? new Date().getTimezoneOffset() : 0}
-        />
-        <textarea
-          name="blob"
-          rows={10}
-          required
-          placeholder={`2026-05-10T09:00\n早安！本週咖啡新品上市，買一送一活動到週日 ☕\n===POST===\n2026-05-12T18:00\n感謝大家熱烈支持，第二波預購開放！`}
-          className="w-full border border-[var(--line)] bg-[var(--surface-2)] px-3 py-2 text-sm font-mono focus:border-[var(--accent)] focus:outline-none leading-relaxed"
-        />
-        <div className="flex items-center gap-3 flex-wrap">
-          <button
-            type="submit"
-            disabled={pending}
-            className="bg-[var(--accent)] px-5 py-2 text-xs font-bold tracking-wide text-[var(--background)] hover:bg-[var(--accent-glow)] transition disabled:opacity-50 inline-flex items-center gap-1.5"
-          >
-            {pending ? <><span className="spinner" /> 處理中</> : "📅📅 批次排程"}
-          </button>
-          {threadsUsername && (
-            <span className="text-[10px] text-[var(--muted)] font-mono">→ 全部發到 @{threadsUsername}</span>
-          )}
-        </div>
-        {state && "error" in state && (
-          <p className="text-xs text-red-400 whitespace-pre-wrap">{state.error}</p>
-        )}
-        {state && "success" in state && state.success && (
-          <p className="text-xs text-[var(--accent)]">✓ 已建立 {state.count} 筆排程</p>
-        )}
-      </form>
-    </section>
-  );
-}
-
 function TemplateScheduler({
   brandId,
   templates,
@@ -329,7 +259,7 @@ function TemplateScheduler({
     createPostTemplate,
     undefined
   );
-  const [recurrence, setRecurrence] = useState<"daily" | "weekly">("daily");
+  const [recurrence, setRecurrence] = useState<"daily" | "weekly" | "hourly">("daily");
   const [showCreate, setShowCreate] = useState(false);
 
   useEffect(() => {
@@ -345,7 +275,7 @@ function TemplateScheduler({
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>
           <div className="font-mono text-xs tracking-widest text-[var(--accent)]">
-            3. 自動發文模板（每日／每週 AI 產出）
+            2. 自動發文模板（AI 依排程產出）
           </div>
           <h3 className="mt-1 text-lg font-bold">定時自動發文</h3>
           <p className="mt-1 text-xs text-[var(--muted)] leading-relaxed">
@@ -389,11 +319,12 @@ function TemplateScheduler({
             <select
               name="recurrence"
               value={recurrence}
-              onChange={(e) => setRecurrence(e.target.value as "daily" | "weekly")}
+              onChange={(e) => setRecurrence(e.target.value as "daily" | "weekly" | "hourly")}
               className="border border-[var(--line)] bg-[var(--surface)] px-3 py-2 text-sm focus:border-[var(--accent)] focus:outline-none"
             >
               <option value="daily">每天</option>
               <option value="weekly">每週</option>
+              <option value="hourly">每 N 小時</option>
             </select>
             {recurrence === "weekly" && (
               <select
@@ -406,13 +337,29 @@ function TemplateScheduler({
                 ))}
               </select>
             )}
-            <input
-              name="timeOfDay"
-              type="time"
-              required
-              defaultValue="09:00"
-              className="border border-[var(--line)] bg-[var(--surface)] px-3 py-2 text-sm focus:border-[var(--accent)] focus:outline-none"
-            />
+            {recurrence === "hourly" ? (
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-[var(--muted)]">每</span>
+                <input
+                  name="intervalHours"
+                  type="number"
+                  min={1}
+                  max={24}
+                  required
+                  defaultValue={3}
+                  className="w-16 border border-[var(--line)] bg-[var(--surface)] px-2 py-2 text-sm focus:border-[var(--accent)] focus:outline-none"
+                />
+                <span className="text-xs text-[var(--muted)]">小時</span>
+              </div>
+            ) : (
+              <input
+                name="timeOfDay"
+                type="time"
+                required
+                defaultValue="09:00"
+                className="border border-[var(--line)] bg-[var(--surface)] px-3 py-2 text-sm focus:border-[var(--accent)] focus:outline-none"
+              />
+            )}
             <button
               type="submit"
               disabled={pending}
@@ -445,14 +392,28 @@ function TemplateScheduler({
 
 function TemplateCard({ template, brandId }: { template: Template; brandId: string }) {
   const [pending, startTransition] = useTransition();
-  const recur =
-    template.recurrence === "daily"
-      ? `每天 ${template.time_of_day}`
-      : `每${WEEKDAYS[template.weekday ?? 1]} ${template.time_of_day}`;
+  const [showPrompt, setShowPrompt] = useState(false);
+  const [previewState, previewAction, previewPending] = useActionState<PreviewState, FormData>(
+    previewTemplateContent,
+    undefined
+  );
+
+  let recur: string;
+  if (template.recurrence === "hourly") {
+    recur = `每 ${template.interval_hours ?? 1} 小時`;
+  } else if (template.recurrence === "weekly") {
+    recur = `每${WEEKDAYS[template.weekday ?? 1]} ${template.time_of_day}`;
+  } else {
+    recur = `每天 ${template.time_of_day}`;
+  }
+
+  const previewText = previewState && "success" in previewState && previewState.success
+    ? previewState.preview
+    : null;
 
   return (
     <li
-      className={`border p-4 ${
+      className={`border p-4 space-y-3 ${
         template.active
           ? "border-[var(--accent)]/40 bg-[var(--surface-2)]"
           : "border-[var(--line)] bg-[var(--surface-2)]/50 opacity-60"
@@ -463,9 +424,6 @@ function TemplateCard({ template, brandId }: { template: Template; brandId: stri
           <div className="font-bold text-sm">{template.name}</div>
           <div className="mt-1 text-[10px] text-[var(--accent)] font-mono tracking-wide">
             {recur} · {template.active ? "✓ 啟用中" : "⏸ 暫停"}
-          </div>
-          <div className="mt-2 text-xs text-[var(--muted)] leading-relaxed line-clamp-3 whitespace-pre-wrap">
-            {template.prompt}
           </div>
           <div className="mt-2 text-[10px] text-[var(--muted)] font-mono">
             下次執行：{new Date(template.next_run_at).toLocaleString()}
@@ -495,6 +453,57 @@ function TemplateCard({ template, brandId }: { template: Template; brandId: stri
           </button>
         </div>
       </div>
+
+      {/* AI Prompt — collapsible */}
+      <div className="border border-[var(--line)] bg-[var(--surface)]/50">
+        <button
+          type="button"
+          onClick={() => setShowPrompt((v) => !v)}
+          className="w-full px-3 py-2 flex items-center justify-between text-[10px] font-mono tracking-wide text-[var(--muted)] hover:text-[var(--foreground)] transition"
+        >
+          <span>📝 你給 AI 的 Prompt</span>
+          <span>{showPrompt ? "▲" : "▼"}</span>
+        </button>
+        {showPrompt && (
+          <div className="px-3 pb-3 pt-1 text-xs text-[var(--foreground)]/85 leading-relaxed whitespace-pre-wrap border-t border-[var(--line)]">
+            {template.prompt}
+          </div>
+        )}
+      </div>
+
+      {/* Preview next post */}
+      <form action={previewAction} className="border border-[var(--line)] bg-[var(--surface)]/50">
+        <input type="hidden" name="templateId" value={template.id} />
+        <div className="flex items-center justify-between gap-2 px-3 py-2">
+          <span className="text-[10px] font-mono tracking-wide text-[var(--muted)]">🔮 下篇 AI 會生成什麼</span>
+          <button
+            type="submit"
+            disabled={previewPending}
+            className="text-[10px] px-2 py-1 border border-[var(--accent)]/50 text-[var(--accent)] hover:bg-[var(--accent)] hover:text-[var(--background)] transition disabled:opacity-50 inline-flex items-center gap-1"
+          >
+            {previewPending ? (
+              <>
+                <span className="spinner" /> 生成中
+              </>
+            ) : previewText ? (
+              "↻ 重新預覽"
+            ) : (
+              "✨ 預覽下篇"
+            )}
+          </button>
+        </div>
+        {previewText && (
+          <div className="px-3 pb-3 pt-1 text-xs text-[var(--foreground)]/85 leading-relaxed whitespace-pre-wrap border-t border-[var(--line)]">
+            {previewText}
+            <p className="mt-2 text-[10px] text-[var(--muted)] font-mono">
+              ⚠ 這只是預覽，AI 實際發文時會重新生成（內容可能略有差異）
+            </p>
+          </div>
+        )}
+        {previewState && "error" in previewState && (
+          <p className="px-3 pb-3 text-[10px] text-red-400">{previewState.error}</p>
+        )}
+      </form>
     </li>
   );
 }
@@ -543,8 +552,6 @@ function PendingList({ posts, brandId }: { posts: Post[]; brandId: string }) {
 }
 
 function HistoryList({ posts, brandId }: { posts: Post[]; brandId: string }) {
-  const [pending, startTransition] = useTransition();
-
   return (
     <section className="border border-[var(--line)] bg-[var(--surface)] p-5 space-y-3">
       <div className="font-mono text-xs tracking-widest text-[var(--muted)]">
@@ -554,43 +561,64 @@ function HistoryList({ posts, brandId }: { posts: Post[]; brandId: string }) {
         <p className="text-xs text-[var(--muted)]">尚無歷史</p>
       ) : (
         <ul className="space-y-2">
-          {posts.slice(0, 30).map((p) => {
-            const ok = p.status === "sent";
-            const fail = p.status === "failed";
-            return (
-              <li
-                key={p.id}
-                className="border border-[var(--line)] bg-[var(--surface-2)] p-3 flex items-start gap-3"
-              >
-                <span className={`shrink-0 text-xs ${ok ? "text-[var(--accent)]" : fail ? "text-red-400" : "text-[var(--muted)]"}`}>
-                  {ok ? "✓" : fail ? "✕" : "⊘"}
-                </span>
-                <div className="min-w-0 flex-1">
-                  <div className="text-[10px] text-[var(--muted)] font-mono">
-                    {p.sent_at ? `已發送 ${new Date(p.sent_at).toLocaleString()}` : `排程 ${new Date(p.scheduled_at).toLocaleString()}`}
-                    {p.template_id ? " · 模板" : ""}
-                  </div>
-                  <div className="mt-1 text-sm leading-relaxed whitespace-pre-wrap line-clamp-2">{p.text}</div>
-                  {p.error_message && (
-                    <div className="mt-1 text-xs text-red-400">{p.error_message}</div>
-                  )}
-                </div>
-                <button
-                  type="button"
-                  disabled={pending}
-                  onClick={() => {
-                    if (!confirm("從歷史刪除？")) return;
-                    startTransition(() => deleteScheduledPost(p.id, brandId));
-                  }}
-                  className="shrink-0 text-[10px] text-[var(--muted)] hover:text-red-400 transition disabled:opacity-50"
-                >
-                  ✕
-                </button>
-              </li>
-            );
-          })}
+          {posts.slice(0, 30).map((p) => (
+            <HistoryItem key={p.id} post={p} brandId={brandId} />
+          ))}
         </ul>
       )}
     </section>
+  );
+}
+
+function HistoryItem({ post: p, brandId }: { post: Post; brandId: string }) {
+  const [pending, startTransition] = useTransition();
+  const [expanded, setExpanded] = useState(false);
+  const ok = p.status === "sent";
+  const fail = p.status === "failed";
+  const isLong = (p.text ?? "").length > 80;
+
+  return (
+    <li className="border border-[var(--line)] bg-[var(--surface-2)] p-3 space-y-2">
+      <div className="flex items-start gap-3">
+        <span className={`shrink-0 text-xs mt-0.5 ${ok ? "text-[var(--accent)]" : fail ? "text-red-400" : "text-[var(--muted)]"}`}>
+          {ok ? "✓" : fail ? "✕" : "⊘"}
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="text-[10px] text-[var(--muted)] font-mono">
+            {p.sent_at ? `已發送 ${new Date(p.sent_at).toLocaleString()}` : `排程 ${new Date(p.scheduled_at).toLocaleString()}`}
+            {p.template_id ? " · 來自模板" : ""}
+          </div>
+          <div className={`mt-1 text-sm leading-relaxed whitespace-pre-wrap ${expanded ? "" : "line-clamp-2"}`}>
+            {p.text}
+          </div>
+          {p.error_message && (
+            <div className="mt-1 text-xs text-red-400 whitespace-pre-wrap">{p.error_message}</div>
+          )}
+        </div>
+        <div className="flex items-center gap-1 shrink-0">
+          {isLong && (
+            <button
+              type="button"
+              onClick={() => setExpanded((v) => !v)}
+              className="text-[10px] px-2 py-1 border border-[var(--line)] text-[var(--muted)] hover:border-[var(--accent)] hover:text-[var(--accent)] transition"
+              title={expanded ? "收起" : "看完整內容"}
+            >
+              {expanded ? "▲ 收起" : "▼ 展開"}
+            </button>
+          )}
+          <button
+            type="button"
+            disabled={pending}
+            onClick={() => {
+              if (!confirm("從歷史刪除？")) return;
+              startTransition(() => deleteScheduledPost(p.id, brandId));
+            }}
+            className="text-[10px] text-[var(--muted)] hover:text-red-400 transition disabled:opacity-50 px-1"
+          >
+            ✕
+          </button>
+        </div>
+      </div>
+    </li>
   );
 }
