@@ -326,7 +326,7 @@ export async function generateReportFromChunks(
   brandName: string,
   chunks: RetrievedChunk[],
   opts: ReportOptions
-): Promise<{ content: string; citations: ReportCitation[] }> {
+): Promise<{ content: string; citations: ReportCitation[]; verifier_warnings: string[] }> {
   const citations: ReportCitation[] = chunks.map((c) => ({
     id: c.id,
     document_id: c.document_id,
@@ -350,8 +350,10 @@ export async function generateReportFromChunks(
     model: CHAT_MODEL,
     max_tokens: maxTokens,
     system: systemPrompt,
+    // Lower temperature: factual generation
+    temperature: 0.2,
     messages: [{ role: "user", content: userMessage }],
-  });
+  } as never);
 
   let content = "";
   for await (const event of response) {
@@ -361,7 +363,69 @@ export async function generateReportFromChunks(
     if (text) content += text;
   }
 
-  return { content, citations };
+  // Fact-check verifier — second AI pass to flag unverified claims
+  const verifier_warnings = await factCheckReport(content, chunks);
+
+  return { content, citations, verifier_warnings };
+}
+
+/**
+ * Second-pass verifier: ask AI to identify claims in `content` that are NOT supported by the
+ * source `chunks`. Returns a list of flagged sentences (max ~10).
+ */
+async function factCheckReport(
+  content: string,
+  chunks: RetrievedChunk[]
+): Promise<string[]> {
+  if (!content.trim() || chunks.length === 0) return [];
+  const sourceBlock = chunks
+    .map((c, i) => `[${i + 1}] ${c.content}`)
+    .join("\n\n---\n\n")
+    .slice(0, 30000); // cap to keep tokens reasonable
+
+  const verifierPrompt = `你是嚴格的 fact-checker。對照下方「來源資料」，找出「報表內容」中**沒有來源支持**的具體聲明（特別是：具體數字、日期、人名、活動名、KPI、比例、金額）。
+
+## 規則
+- 只標記**具體事實**（含數字／日期／人名／專有名詞），一般敘述不需標記
+- 嚴格：報表中的數字若不在來源資料 → 標記
+- 寬容：報表的歸納、推論、建議**不需要**逐字對照（這些是合理 AI 加值）
+- 輸出格式：每行一筆問題，格式為「⚠ <原文片段>｜原因：<為何沒來源>」
+- 沒問題就回「none」
+
+## 來源資料
+${sourceBlock}
+
+## 報表內容
+${content}
+
+請輸出檢查結果（最多 10 筆，最嚴重的優先）：`;
+
+  try {
+    const client = await anthropic();
+    const response = await client.messages.stream({
+      model: CHAT_MODEL,
+      max_tokens: 1500,
+      system: verifierPrompt,
+      temperature: 0,
+      messages: [{ role: "user", content: "請開始檢查。" }],
+    } as never);
+
+    let raw = "";
+    for await (const event of response) {
+      if (event.type !== "content_block_delta") continue;
+      if (event.delta?.type !== "text_delta") continue;
+      if (event.delta.text) raw += event.delta.text;
+    }
+
+    if (!raw.trim() || raw.trim().toLowerCase() === "none") return [];
+    return raw
+      .split(/\r?\n/)
+      .map((l) => l.trim())
+      .filter((l) => l.startsWith("⚠"))
+      .slice(0, 10);
+  } catch {
+    return []; // verifier failure is non-fatal
+  }
 }
 
 export function makeAutoTitle(brandName: string, focus: string, lang: Lang): string {

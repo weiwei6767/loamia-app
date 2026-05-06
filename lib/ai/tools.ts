@@ -293,7 +293,7 @@ export type ReportToolInput = {
 };
 
 export type ReportToolResult =
-  | { ok: true; reportId: string; title: string; link: string }
+  | { ok: true; reportId: string; title: string; link: string; warnings?: string[] }
   | { ok: false; error: string };
 
 const VALID_TONES: Tone[] = ["professional", "business", "client", "internal", "casual", "data"];
@@ -369,6 +369,7 @@ export async function executeGenerateReport(
     reportId: report.id as string,
     title: report.title as string,
     link: `/brand/${brand.id}/reports/${report.id}`,
+    warnings: result.verifier_warnings ?? [],
   };
 }
 
@@ -753,11 +754,110 @@ function stripTags(s: string): string {
   return s.replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim();
 }
 
-export async function executeWebSearch(input: {
-  query?: string;
-}): Promise<{ ok: true; results: WebSearchResult[]; query: string } | { ok: false; error: string }> {
-  const q = String(input.query ?? "").trim().slice(0, 200);
-  if (!q) return { ok: false, error: "missing query" };
+/**
+ * Privacy filter: build a list of brand-private substrings, return any that match the query.
+ * Returns matched terms (empty array = safe to send).
+ */
+async function findPrivateLeaks(
+  supabase: SupabaseClient,
+  brandId: string,
+  query: string
+): Promise<string[]> {
+  const lower = query.toLowerCase();
+  const privates: string[] = [];
+
+  // Brand identity + name
+  const { data: brand } = await supabase
+    .from("brands")
+    .select("name, positioning, target_audience, tone_guide, taboo_words")
+    .eq("id", brandId)
+    .single();
+  if (brand) {
+    if (brand.name) privates.push(String(brand.name));
+    if (brand.positioning) privates.push(String(brand.positioning));
+    if (brand.target_audience) privates.push(String(brand.target_audience));
+    if (brand.tone_guide) privates.push(String(brand.tone_guide));
+    if (Array.isArray(brand.taboo_words)) {
+      for (const w of brand.taboo_words as string[]) privates.push(w);
+    }
+  }
+
+  // KOL names + handles + emails
+  const { data: kols } = await supabase
+    .from("brand_kols")
+    .select("name, handle, contact_email, rate_note")
+    .eq("brand_id", brandId);
+  for (const k of kols ?? []) {
+    if (k.name) privates.push(String(k.name));
+    if (k.handle) privates.push(String(k.handle));
+    if (k.contact_email) privates.push(String(k.contact_email));
+    if (k.rate_note) privates.push(String(k.rate_note));
+  }
+
+  // Competitor titles
+  const { data: comps } = await supabase
+    .from("brand_intelligence")
+    .select("title")
+    .eq("brand_id", brandId)
+    .eq("category", "competitor");
+  for (const c of comps ?? []) {
+    if (c.title) privates.push(String(c.title));
+  }
+
+  // Match: any private chunk of length >= 4 that appears as substring
+  const matched: string[] = [];
+  for (const p of privates) {
+    const pTrim = p.trim();
+    if (pTrim.length < 4) continue;
+    if (lower.includes(pTrim.toLowerCase())) matched.push(pTrim);
+    // Also split into words and match individual proper-noun-ish words
+    const words = pTrim.split(/\s+/).filter((w) => w.length >= 4);
+    for (const w of words) {
+      if (lower.includes(w.toLowerCase()) && !matched.includes(w)) matched.push(w);
+    }
+  }
+  return Array.from(new Set(matched));
+}
+
+export async function executeWebSearch(
+  supabase: SupabaseClient,
+  brand: { id: string; agency_id: string },
+  userId: string,
+  input: { query?: string }
+): Promise<{ ok: true; results: WebSearchResult[]; query: string } | { ok: false; error: string }> {
+  const qRaw = String(input.query ?? "").trim();
+  if (!qRaw) return { ok: false, error: "missing query" };
+
+  // Length / character limit (anti-abuse)
+  if (qRaw.length > 100) {
+    return { ok: false, error: "query too long (max 100 chars). Re-phrase as a generic public-knowledge question." };
+  }
+  if (/["「」『』]/.test(qRaw)) {
+    return {
+      ok: false,
+      error: "query may not contain quoted strings (privacy guard). Re-phrase without quotes.",
+    };
+  }
+
+  const q = qRaw.slice(0, 100);
+
+  // Privacy filter — block if query contains brand-private terms
+  const leaks = await findPrivateLeaks(supabase, brand.id, q);
+  if (leaks.length > 0) {
+    const reason = `query contains private brand data: ${leaks.slice(0, 3).join(", ")}${leaks.length > 3 ? "..." : ""}`;
+    await supabase.from("web_search_log").insert({
+      agency_id: brand.agency_id,
+      brand_id: brand.id,
+      user_id: userId,
+      query: q,
+      blocked: true,
+      blocked_reason: reason,
+    });
+    return {
+      ok: false,
+      error: `🔒 隱私防護阻擋：${reason}。請改用公開、通用的搜尋字串，不要包含品牌私有資訊。`,
+    };
+  }
 
   // Use DuckDuckGo HTML lite — no API key, no signup
   const url = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(q)}`;
@@ -803,6 +903,15 @@ export async function executeWebSearch(input: {
         snippet: (snippets[i] ?? "").slice(0, 400),
       });
     }
+
+    // Audit log success
+    await supabase.from("web_search_log").insert({
+      agency_id: brand.agency_id,
+      brand_id: brand.id,
+      user_id: userId,
+      query: q,
+      blocked: false,
+    });
 
     return { ok: true, results: results.slice(0, 5), query: q };
   } catch (err) {

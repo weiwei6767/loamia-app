@@ -260,7 +260,7 @@ export async function POST(req: NextRequest) {
                 resultPayload = await runScheduler(supabase, brand.id);
                 break;
               case "web_search":
-                resultPayload = await executeWebSearch(input as { query?: string });
+                resultPayload = await executeWebSearch(supabase, brand, user.id, input as { query?: string });
                 break;
               case "web_fetch":
                 resultPayload = await executeWebFetch(input as { url?: string });
