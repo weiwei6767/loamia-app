@@ -21,6 +21,9 @@ function Shell({ locale, children }: { locale: "zh" | "en"; children: React.Reac
             ← LOAMIA
           </Link>
           <nav className="flex items-center gap-4 text-xs text-[var(--muted)]">
+            <Link href="/rules" className="hover:text-[var(--foreground)]">
+              {locale === "en" ? "Rules" : "規則"}
+            </Link>
             <Link href="/privacy" className="hover:text-[var(--foreground)]">
               {locale === "en" ? "Privacy" : "隱私權"}
             </Link>
@@ -28,7 +31,7 @@ function Shell({ locale, children }: { locale: "zh" | "en"; children: React.Reac
               {locale === "en" ? "Terms" : "服務條款"}
             </Link>
             <Link href="/data-deletion" className="text-[var(--accent)]">
-              {locale === "en" ? "Data Deletion" : "資料刪除"}
+              {locale === "en" ? "Delete" : "刪除"}
             </Link>
           </nav>
         </div>

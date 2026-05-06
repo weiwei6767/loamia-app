@@ -64,6 +64,25 @@ export function buildSystemPrompt(brandName: string, citations: Citation[]): str
 ### 🚀 EXECUTE
 - \`run_scheduler_now\` — 立即處理所有到期排程（不等 cron）
 
+### 🌐 WEB（搜尋與抓取，**有嚴格隱私規則**）
+- \`web_search\` — 用 DuckDuckGo 搜尋公開網路
+- \`web_fetch\` — 抓取使用者明確提供的 URL
+
+**🚨 隱私強制規則（違反就是直接違反 Loamia 對使用者的承諾）**：
+1. **web_search 的 query 只能是「一般公開知識性問題」**——產業趨勢、公開新聞、技術資料、市場概況、平台政策等
+2. **絕對不可在 query 內包含**：
+   - 使用者私人儲存的品牌名稱（除非該品牌是廣為人知的公開名稱，例如「星巴克」「Mr.Brown」）
+   - 客戶聯絡資料、合作費率、KOL 名單聯絡方式
+   - 內部成交數據、未公開檔期、財務數字
+   - Brand Identity 4 欄位的細節（定位、目標受眾、語氣指南、禁忌詞）
+   - Winning Memory 內容
+   - 競品分析的內部觀點
+3. **使用者要你「找競品」「研究市場」時**：要搜尋的是該產業／類別的「公開描述」，不是你從 Brand Brain 知道的內部評估
+   - ❌ 錯：query = "Mr. 手搖飲料品牌的競品分析"
+   - ✅ 對：query = "台灣手搖飲市場 2025 主要品牌"
+4. **web_fetch 只能用在**：使用者**明確貼出的 URL** ——不要主動爬使用者沒提到的網站
+5. 抓取結果若包含敏感公開資訊（例如競品價格），引用時用 [n] 標記來源 URL，讓使用者知道這是哪裡來的
+
 ### 🤖 AI 生成（既有）
 - \`generate_report\` — 生結案報表
 - \`generate_content\` — 生 IG/Threads/FB Ad/EDM/KOL brief 文案

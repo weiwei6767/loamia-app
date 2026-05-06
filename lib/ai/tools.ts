@@ -15,6 +15,7 @@ import {
   generateMonitorReplies,
   type ContentType,
 } from "./creative";
+import { fetchPage } from "./web-fetch";
 
 export const CHAT_TOOLS = [
   {
@@ -220,6 +221,37 @@ export const CHAT_TOOLS = [
     name: "run_scheduler_now",
     description: "Manually trigger the scheduler to process all due scheduled posts and templates. Use when user says '立即發送' or '不要等 cron'.",
     input_schema: { type: "object" as const, properties: {} },
+  },
+  // ── WEB tools (with strict privacy rules — see system prompt) ──
+  {
+    name: "web_search",
+    description:
+      "Search the public web (DuckDuckGo) for general public knowledge. CRITICAL PRIVACY RULES: (1) The query MUST be a generic public-knowledge question only. (2) NEVER include the user's brand name (unless already widely known publicly), client contact info, rates, internal sales numbers, Brand Identity details, unannounced campaigns, or any private data the user has stored in Loamia. (3) Re-phrase the user's request into a general industry/category query. Example: user says 'research my competitors' → search 'Taipei beverage market 2025 trends' (NOT 'competitors of Mr. Tea Brand'). Returns top results with title + URL + snippet.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        query: {
+          type: "string",
+          description: "A generic public-knowledge search query (≤100 chars). Must NOT contain private brand data.",
+        },
+      },
+      required: ["query"],
+    },
+  },
+  {
+    name: "web_fetch",
+    description:
+      "Fetch a specific URL provided by the user (or a public URL the user has explicitly mentioned). Returns the page's title, description, and visible text (max 8000 chars). Use this when the user pastes a URL and wants you to read/summarize the page. Do NOT use this on URLs you guessed; only on URLs the user provided.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        url: {
+          type: "string",
+          description: "The exact URL to fetch (must start with http:// or https://).",
+        },
+      },
+      required: ["url"],
+    },
   },
   // ── PLAN tool (must be used before destructive / multi-step) ──
   {
@@ -697,6 +729,110 @@ export type PlanInput = {
   steps?: Array<{ action: string; description: string }>;
   warnings?: string[];
 };
+
+// ─── WEB tool executors ───────────────────────────
+
+export type WebSearchResult = {
+  title: string;
+  url: string;
+  snippet: string;
+};
+
+function decodeHtml(s: string): string {
+  return s
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(parseInt(n, 10)));
+}
+
+function stripTags(s: string): string {
+  return s.replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim();
+}
+
+export async function executeWebSearch(input: {
+  query?: string;
+}): Promise<{ ok: true; results: WebSearchResult[]; query: string } | { ok: false; error: string }> {
+  const q = String(input.query ?? "").trim().slice(0, 200);
+  if (!q) return { ok: false, error: "missing query" };
+
+  // Use DuckDuckGo HTML lite — no API key, no signup
+  const url = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(q)}`;
+  try {
+    const res = await fetch(url, {
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (compatible; LoamiaBot/1.0; +https://loamia.xyz)",
+        Accept: "text/html",
+      },
+      signal: AbortSignal.timeout(15000),
+    });
+    if (!res.ok) return { ok: false, error: `search failed ${res.status}` };
+    const html = await res.text();
+
+    const results: WebSearchResult[] = [];
+    // DuckDuckGo HTML format: each result has a class="result__a" link + class="result__snippet" text
+    const linkRe = /<a[^>]+class="[^"]*result__a[^"]*"[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/g;
+    const snippetRe = /<a[^>]+class="[^"]*result__snippet[^"]*"[^>]*>([\s\S]*?)<\/a>/g;
+
+    const links: Array<{ url: string; title: string }> = [];
+    let m: RegExpExecArray | null;
+    while ((m = linkRe.exec(html)) !== null && links.length < 10) {
+      let raw = m[1];
+      // DDG sometimes wraps URLs in /l/?uddg=ENCODED
+      if (raw.startsWith("/l/?")) {
+        const enc = raw.match(/uddg=([^&]+)/)?.[1];
+        if (enc) raw = decodeURIComponent(enc);
+      }
+      if (raw.startsWith("//")) raw = "https:" + raw;
+      links.push({ url: raw, title: stripTags(decodeHtml(m[2])) });
+    }
+
+    const snippets: string[] = [];
+    while ((m = snippetRe.exec(html)) !== null && snippets.length < 10) {
+      snippets.push(stripTags(decodeHtml(m[1])));
+    }
+
+    for (let i = 0; i < links.length; i++) {
+      results.push({
+        title: links[i].title.slice(0, 150),
+        url: links[i].url.slice(0, 500),
+        snippet: (snippets[i] ?? "").slice(0, 400),
+      });
+    }
+
+    return { ok: true, results: results.slice(0, 5), query: q };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "search failed" };
+  }
+}
+
+export async function executeWebFetch(input: {
+  url?: string;
+}): Promise<
+  | { ok: true; url: string; title: string; description: string; text: string; truncated: boolean }
+  | { ok: false; error: string }
+> {
+  const u = String(input.url ?? "").trim();
+  if (!u) return { ok: false, error: "missing url" };
+  if (!/^https?:\/\//i.test(u)) return { ok: false, error: "url must start with http:// or https://" };
+  try {
+    const page = await fetchPage(u);
+    return {
+      ok: true,
+      url: page.url,
+      title: page.title.slice(0, 200),
+      description: page.description.slice(0, 400),
+      text: page.text.slice(0, 8000),
+      truncated: page.truncated || page.text.length > 8000,
+    };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "fetch failed" };
+  }
+}
 
 export function executeProposePlan(input: PlanInput) {
   return {

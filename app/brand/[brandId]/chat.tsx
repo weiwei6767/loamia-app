@@ -336,6 +336,18 @@ const TOOL_META: Record<string, ToolMeta> = {
     failLabel: "✕ 回覆生成失敗",
     ctaText: "→ 前往 Coast Guard",
   },
+  web_search: {
+    runningLabel: "🌐 正在搜尋公開網路...",
+    successLabel: "✓ 已取得搜尋結果",
+    failLabel: "✕ 搜尋失敗",
+    ctaText: "",
+  },
+  web_fetch: {
+    runningLabel: "🌐 正在抓取網頁...",
+    successLabel: "✓ 已抓取網頁內容",
+    failLabel: "✕ 抓取失敗",
+    ctaText: "",
+  },
 };
 
 function ToolEventCard({

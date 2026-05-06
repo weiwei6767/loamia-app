@@ -21,11 +21,17 @@ function Shell({ locale, children }: { locale: "zh" | "en"; children: React.Reac
             ← LOAMIA
           </Link>
           <nav className="flex items-center gap-4 text-xs text-[var(--muted)]">
+            <Link href="/rules" className="hover:text-[var(--foreground)]">
+              {locale === "en" ? "Rules" : "規則"}
+            </Link>
             <Link href="/privacy" className="text-[var(--accent)]">
               {locale === "en" ? "Privacy" : "隱私權"}
             </Link>
             <Link href="/terms" className="hover:text-[var(--foreground)]">
               {locale === "en" ? "Terms" : "服務條款"}
+            </Link>
+            <Link href="/data-deletion" className="hover:text-[var(--foreground)]">
+              {locale === "en" ? "Delete" : "刪除"}
             </Link>
           </nav>
         </div>

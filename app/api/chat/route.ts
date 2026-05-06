@@ -19,6 +19,8 @@ import {
   executeUpdateKolStatus,
   executeMarkReplyOutcome,
   executeProposePlan,
+  executeWebSearch,
+  executeWebFetch,
   type ReportToolInput,
   type ContentToolInput,
   type ReplyToolInput,
@@ -256,6 +258,12 @@ export async function POST(req: NextRequest) {
                 break;
               case "run_scheduler_now":
                 resultPayload = await runScheduler(supabase, brand.id);
+                break;
+              case "web_search":
+                resultPayload = await executeWebSearch(input as { query?: string });
+                break;
+              case "web_fetch":
+                resultPayload = await executeWebFetch(input as { url?: string });
                 break;
               case "propose_plan":
                 resultPayload = executeProposePlan(input as PlanInput);
