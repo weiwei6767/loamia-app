@@ -183,7 +183,7 @@ export async function createPostTemplate(
   return { success: true };
 }
 
-// Preview what the template will produce (does NOT save)
+// Generate next-post content with AI and save as the locked version that will actually be sent
 export type PreviewState =
   | undefined
   | { error: string }
@@ -194,6 +194,7 @@ export async function previewTemplateContent(
   formData: FormData
 ): Promise<PreviewState> {
   const templateId = String(formData.get("templateId") ?? "");
+  const brandId = String(formData.get("brandId") ?? "");
   if (!templateId) return { error: "missing templateId" };
 
   const supabase = await createClient();
@@ -223,10 +224,68 @@ export async function previewTemplateContent(
       ""
     );
     const preview = (result.variants[0] ?? "").trim().slice(0, 500);
+
+    // Save as the locked next-post text — cron will use this directly
+    await supabase
+      .from("post_templates")
+      .update({ next_post_text: preview })
+      .eq("id", templateId);
+
+    if (brandId) revalidatePath(`/brand/${brandId}/schedule`);
     return { success: true, preview };
   } catch (err) {
     return { error: err instanceof Error ? err.message : "預覽失敗" };
   }
+}
+
+// User saves their hand-edited version of next-post text
+export async function saveTemplateNextText(
+  templateId: string,
+  brandId: string,
+  text: string
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (!templateId || !brandId) return { ok: false, error: "missing fields" };
+  const trimmed = text.trim().slice(0, 500);
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("post_templates")
+    .update({ next_post_text: trimmed || null })
+    .eq("id", templateId);
+  if (error) return { ok: false, error: error.message };
+  revalidatePath(`/brand/${brandId}/schedule`);
+  return { ok: true };
+}
+
+// Clear the saved next-post text — so cron will generate fresh next time
+export async function clearTemplateNextText(
+  templateId: string,
+  brandId: string
+): Promise<void> {
+  const supabase = await createClient();
+  await supabase
+    .from("post_templates")
+    .update({ next_post_text: null })
+    .eq("id", templateId);
+  revalidatePath(`/brand/${brandId}/schedule`);
+}
+
+// Edit the AI prompt of an existing template
+export async function updateTemplatePrompt(
+  templateId: string,
+  brandId: string,
+  prompt: string
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (!templateId || !brandId) return { ok: false, error: "missing fields" };
+  const trimmed = prompt.trim().slice(0, 1500);
+  if (!trimmed) return { ok: false, error: "prompt 不能空白" };
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("post_templates")
+    .update({ prompt: trimmed })
+    .eq("id", templateId);
+  if (error) return { ok: false, error: error.message };
+  revalidatePath(`/brand/${brandId}/schedule`);
+  return { ok: true };
 }
 
 export async function toggleTemplateActive(templateId: string, active: boolean, brandId: string) {

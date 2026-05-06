@@ -10,6 +10,9 @@ import {
   toggleTemplateActive,
   deletePostTemplate,
   previewTemplateContent,
+  saveTemplateNextText,
+  clearTemplateNextText,
+  updateTemplatePrompt,
   type ScheduleState,
   type PreviewState,
 } from "./actions";
@@ -35,6 +38,7 @@ type Template = {
   interval_hours: number | null;
   next_run_at: string;
   active: boolean;
+  next_post_text: string | null;
 };
 
 const WEEKDAYS = ["週日", "週一", "週二", "週三", "週四", "週五", "週六"];
@@ -391,12 +395,8 @@ function TemplateScheduler({
 }
 
 function TemplateCard({ template, brandId }: { template: Template; brandId: string }) {
+  const router = useRouter();
   const [pending, startTransition] = useTransition();
-  const [showPrompt, setShowPrompt] = useState(false);
-  const [previewState, previewAction, previewPending] = useActionState<PreviewState, FormData>(
-    previewTemplateContent,
-    undefined
-  );
 
   let recur: string;
   if (template.recurrence === "hourly") {
@@ -406,10 +406,6 @@ function TemplateCard({ template, brandId }: { template: Template; brandId: stri
   } else {
     recur = `每天 ${template.time_of_day}`;
   }
-
-  const previewText = previewState && "success" in previewState && previewState.success
-    ? previewState.preview
-    : null;
 
   return (
     <li
@@ -454,28 +450,183 @@ function TemplateCard({ template, brandId }: { template: Template; brandId: stri
         </div>
       </div>
 
-      {/* AI Prompt — collapsible */}
-      <div className="border border-[var(--line)] bg-[var(--surface)]/50">
-        <button
-          type="button"
-          onClick={() => setShowPrompt((v) => !v)}
-          className="w-full px-3 py-2 flex items-center justify-between text-[10px] font-mono tracking-wide text-[var(--muted)] hover:text-[var(--foreground)] transition"
-        >
-          <span>📝 你給 AI 的 Prompt</span>
-          <span>{showPrompt ? "▲" : "▼"}</span>
-        </button>
-        {showPrompt && (
-          <div className="px-3 pb-3 pt-1 text-xs text-[var(--foreground)]/85 leading-relaxed whitespace-pre-wrap border-t border-[var(--line)]">
-            {template.prompt}
-          </div>
-        )}
-      </div>
+      <EditablePrompt template={template} brandId={brandId} onSaved={() => router.refresh()} />
+      <EditableNextPost template={template} brandId={brandId} onChange={() => router.refresh()} />
+    </li>
+  );
+}
 
-      {/* Preview next post */}
-      <form action={previewAction} className="border border-[var(--line)] bg-[var(--surface)]/50">
-        <input type="hidden" name="templateId" value={template.id} />
-        <div className="flex items-center justify-between gap-2 px-3 py-2">
-          <span className="text-[10px] font-mono tracking-wide text-[var(--muted)]">🔮 下篇 AI 會生成什麼</span>
+function EditablePrompt({
+  template,
+  brandId,
+  onSaved,
+}: {
+  template: Template;
+  brandId: string;
+  onSaved: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(template.prompt);
+  const [pending, startTransition] = useTransition();
+  const [msg, setMsg] = useState<string | null>(null);
+
+  function save() {
+    setMsg(null);
+    startTransition(async () => {
+      const res = await updateTemplatePrompt(template.id, brandId, draft);
+      if (res.ok) {
+        setEditing(false);
+        setMsg("✓ 已儲存");
+        setTimeout(() => setMsg(null), 2000);
+        onSaved();
+      } else {
+        setMsg(`✕ ${res.error}`);
+      }
+    });
+  }
+
+  return (
+    <div className="border border-[var(--line)] bg-[var(--surface)]/50">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="w-full px-3 py-2 flex items-center justify-between text-[10px] font-mono tracking-wide text-[var(--muted)] hover:text-[var(--foreground)] transition"
+      >
+        <span>📝 你給 AI 的 Prompt</span>
+        <span>{open ? "▲" : "▼"}</span>
+      </button>
+      {open && (
+        <div className="px-3 pb-3 pt-1 border-t border-[var(--line)] space-y-2">
+          {editing ? (
+            <>
+              <textarea
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                rows={5}
+                maxLength={1500}
+                className="w-full border border-[var(--line)] bg-[var(--surface-2)] px-3 py-2 text-xs leading-relaxed focus:border-[var(--accent)] focus:outline-none"
+              />
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  disabled={pending}
+                  onClick={save}
+                  className="text-[10px] px-3 py-1 bg-[var(--accent)] text-[var(--background)] font-bold hover:bg-[var(--accent-glow)] transition disabled:opacity-50"
+                >
+                  {pending ? "儲存中..." : "✓ 儲存"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDraft(template.prompt);
+                    setEditing(false);
+                  }}
+                  className="text-[10px] px-3 py-1 border border-[var(--line)] text-[var(--muted)]"
+                >
+                  取消
+                </button>
+                {msg && <span className="text-[10px] text-[var(--accent)]">{msg}</span>}
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="text-xs text-[var(--foreground)]/85 leading-relaxed whitespace-pre-wrap">
+                {template.prompt}
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setDraft(template.prompt);
+                  setEditing(true);
+                }}
+                className="text-[10px] px-2 py-1 border border-[var(--line)] text-[var(--muted)] hover:border-[var(--accent)] hover:text-[var(--accent)] transition"
+              >
+                ✏️ 修改 Prompt
+              </button>
+              {msg && <span className="ml-2 text-[10px] text-[var(--accent)]">{msg}</span>}
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function EditableNextPost({
+  template,
+  brandId,
+  onChange,
+}: {
+  template: Template;
+  brandId: string;
+  onChange: () => void;
+}) {
+  const [previewState, previewAction, previewPending] = useActionState<PreviewState, FormData>(
+    previewTemplateContent,
+    undefined
+  );
+  const [draft, setDraft] = useState(template.next_post_text ?? "");
+  const [editingMode, setEditingMode] = useState(!!template.next_post_text);
+  const [savePending, startTransition] = useTransition();
+  const [msg, setMsg] = useState<string | null>(null);
+
+  // When AI generates a fresh preview, reset draft to the new text and enter editing mode
+  useEffect(() => {
+    if (previewState && "success" in previewState && previewState.success) {
+      setDraft(previewState.preview);
+      setEditingMode(true);
+      onChange();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [previewState]);
+
+  // Sync if template.next_post_text changes from outside
+  useEffect(() => {
+    setDraft(template.next_post_text ?? "");
+    setEditingMode(!!template.next_post_text);
+  }, [template.next_post_text]);
+
+  function saveEdit() {
+    setMsg(null);
+    startTransition(async () => {
+      const res = await saveTemplateNextText(template.id, brandId, draft);
+      if (res.ok) {
+        setMsg("✓ 已鎖定，下次到時間會發送這版");
+        setTimeout(() => setMsg(null), 3000);
+        onChange();
+      } else {
+        setMsg(`✕ ${res.error}`);
+      }
+    });
+  }
+
+  function clearLocked() {
+    if (!confirm("清除鎖定的內容？下次到時間 AI 會重新生成新的版本。")) return;
+    startTransition(async () => {
+      await clearTemplateNextText(template.id, brandId);
+      setDraft("");
+      setEditingMode(false);
+      setMsg("✓ 已清除，下次重新生成");
+      setTimeout(() => setMsg(null), 2000);
+      onChange();
+    });
+  }
+
+  const hasLocked = !!template.next_post_text;
+
+  return (
+    <div className="border border-[var(--line)] bg-[var(--surface)]/50">
+      <div className="px-3 py-2 flex items-center justify-between gap-2 flex-wrap">
+        <span className="text-[10px] font-mono tracking-wide text-[var(--muted)]">
+          🔮 下次要發送的內容
+          {hasLocked && (
+            <span className="ml-1 text-[var(--accent)]">· 🔒 已鎖定</span>
+          )}
+        </span>
+        <form action={previewAction} className="inline-flex">
+          <input type="hidden" name="templateId" value={template.id} />
+          <input type="hidden" name="brandId" value={brandId} />
           <button
             type="submit"
             disabled={previewPending}
@@ -485,26 +636,60 @@ function TemplateCard({ template, brandId }: { template: Template; brandId: stri
               <>
                 <span className="spinner" /> 生成中
               </>
-            ) : previewText ? (
-              "↻ 重新預覽"
+            ) : hasLocked ? (
+              "↻ 重新生成"
             ) : (
-              "✨ 預覽下篇"
+              "✨ AI 生成下篇"
             )}
           </button>
-        </div>
-        {previewText && (
-          <div className="px-3 pb-3 pt-1 text-xs text-[var(--foreground)]/85 leading-relaxed whitespace-pre-wrap border-t border-[var(--line)]">
-            {previewText}
-            <p className="mt-2 text-[10px] text-[var(--muted)] font-mono">
-              ⚠ 這只是預覽，AI 實際發文時會重新生成（內容可能略有差異）
-            </p>
+        </form>
+      </div>
+
+      {editingMode && (
+        <div className="px-3 pb-3 pt-1 border-t border-[var(--line)] space-y-2">
+          <textarea
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            rows={6}
+            maxLength={500}
+            placeholder="AI 生成的內容會出現在這裡，可手動修改..."
+            className="w-full border border-[var(--line)] bg-[var(--surface-2)] px-3 py-2 text-xs leading-relaxed focus:border-[var(--accent)] focus:outline-none whitespace-pre-wrap"
+          />
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              type="button"
+              disabled={savePending}
+              onClick={saveEdit}
+              className="text-[10px] px-3 py-1 bg-[var(--accent)] text-[var(--background)] font-bold hover:bg-[var(--accent-glow)] transition disabled:opacity-50"
+            >
+              {savePending ? "儲存中..." : "🔒 儲存並鎖定"}
+            </button>
+            {hasLocked && (
+              <button
+                type="button"
+                disabled={savePending}
+                onClick={clearLocked}
+                className="text-[10px] px-3 py-1 border border-[var(--line)] text-[var(--muted)] hover:border-red-400 hover:text-red-400 transition disabled:opacity-50"
+              >
+                ✕ 清除（讓 AI 重新生成）
+              </button>
+            )}
+            <span className="text-[10px] text-[var(--muted)]">
+              {draft.length}/500
+            </span>
+            {msg && <span className="text-[10px] text-[var(--accent)]">{msg}</span>}
           </div>
-        )}
-        {previewState && "error" in previewState && (
-          <p className="px-3 pb-3 text-[10px] text-red-400">{previewState.error}</p>
-        )}
-      </form>
-    </li>
+          <p className="text-[10px] text-[var(--muted)] leading-relaxed">
+            🔒 儲存後，下次到時間會發送**這個版本**（不重新生成）。<br/>
+            清除後，下次 AI 會重新依 Prompt 產生。
+          </p>
+        </div>
+      )}
+
+      {previewState && "error" in previewState && (
+        <p className="px-3 pb-3 text-[10px] text-red-400">{previewState.error}</p>
+      )}
+    </div>
   );
 }
 

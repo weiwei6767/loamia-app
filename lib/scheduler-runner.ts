@@ -33,6 +33,7 @@ type TemplateRow = {
   interval_hours: number | null;
   tz_offset_minutes: number | null;
   next_run_at: string;
+  next_post_text: string | null;
 };
 
 /**
@@ -52,7 +53,7 @@ export async function runScheduler(
   let tmplQuery = supabase
     .from("post_templates")
     .select(
-      "id, agency_id, brand_id, user_id, prompt, recurrence, weekday, time_of_day, interval_hours, tz_offset_minutes, next_run_at"
+      "id, agency_id, brand_id, user_id, prompt, recurrence, weekday, time_of_day, interval_hours, tz_offset_minutes, next_run_at, next_post_text"
     )
     .eq("active", true)
     .lte("next_run_at", nowIso);
@@ -68,14 +69,20 @@ export async function runScheduler(
         .single();
       if (!brand) continue;
 
-      const aiResult = await generateContentVariants(
-        tmpl.brand_id,
-        brand.name as string,
-        "threads_post",
-        tmpl.prompt,
-        ""
-      );
-      const text = (aiResult.variants[0] ?? "").trim().slice(0, 500);
+      // Use locked next_post_text if pre-staged by user, else generate fresh via AI
+      let text: string;
+      if (tmpl.next_post_text && tmpl.next_post_text.trim()) {
+        text = tmpl.next_post_text.trim().slice(0, 500);
+      } else {
+        const aiResult = await generateContentVariants(
+          tmpl.brand_id,
+          brand.name as string,
+          "threads_post",
+          tmpl.prompt,
+          ""
+        );
+        text = (aiResult.variants[0] ?? "").trim().slice(0, 500);
+      }
       if (!text) {
         result.errors.push(`template ${tmpl.id}: empty AI output`);
         continue;
@@ -100,9 +107,10 @@ export async function runScheduler(
         tmpl.tz_offset_minutes ?? 0,
         tmpl.interval_hours ?? null
       );
+      // Clear next_post_text after use so the next cycle generates fresh
       await supabase
         .from("post_templates")
-        .update({ next_run_at: next.toISOString() })
+        .update({ next_run_at: next.toISOString(), next_post_text: null })
         .eq("id", tmpl.id);
 
       result.templates_run += 1;
