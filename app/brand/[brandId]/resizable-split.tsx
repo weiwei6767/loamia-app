@@ -16,6 +16,7 @@ export function ResizableSplit({
 }) {
   const [chatWidth, setChatWidth] = useState(DEFAULT);
   const [hydrated, setHydrated] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const draggingRef = useRef(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -64,8 +65,10 @@ export function ResizableSplit({
   }, []);
 
   return (
-    <div ref={containerRef} className="flex flex-1 overflow-hidden h-full">
+    <div ref={containerRef} className="flex flex-1 overflow-hidden h-full relative">
       <main className="flex-1 min-w-0 overflow-y-auto">{children}</main>
+
+      {/* xl+: inline resizable chat */}
       <div
         role="separator"
         aria-orientation="vertical"
@@ -80,6 +83,48 @@ export function ResizableSplit({
       >
         {rightContent}
       </aside>
+
+      {/* < xl: floating button + slide-out drawer */}
+      {!drawerOpen && (
+        <button
+          type="button"
+          onClick={() => setDrawerOpen(true)}
+          className="xl:hidden fixed bottom-20 right-4 z-30 w-12 h-12 rounded-full bg-[var(--accent)] text-[var(--background)] shadow-2xl flex items-center justify-center text-xl font-bold hover:scale-110 active:scale-95 transition"
+          aria-label="開啟 Brand Brain 對話"
+          title="開啟 Brand Brain"
+        >
+          🧠
+        </button>
+      )}
+
+      {drawerOpen && (
+        <div
+          className="xl:hidden fixed inset-0 z-40 flex"
+          onClick={() => setDrawerOpen(false)}
+        >
+          <div className="flex-1" />
+          <aside
+            className="w-full sm:max-w-md flex flex-col bg-[var(--background)] border-l-2 border-[var(--accent)] shadow-2xl"
+            style={{ animation: "slide-in-right 0.25s cubic-bezier(0.16, 1, 0.3, 1)" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="px-3 py-2 border-b border-[var(--line)] flex items-center justify-between gap-2 shrink-0">
+              <span className="font-mono text-[10px] tracking-widest text-[var(--accent)]">
+                🧠 BRAND BRAIN
+              </span>
+              <button
+                type="button"
+                onClick={() => setDrawerOpen(false)}
+                className="text-[var(--muted)] hover:text-[var(--foreground)] text-lg shrink-0"
+                aria-label="close"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="flex-1 min-h-0 flex flex-col">{rightContent}</div>
+          </aside>
+        </div>
+      )}
     </div>
   );
 }
