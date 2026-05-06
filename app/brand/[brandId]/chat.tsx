@@ -21,6 +21,12 @@ type ToolEvent = {
   result?: unknown;
 };
 
+type Plan = {
+  goal: string;
+  steps: Array<{ action: string; description: string }>;
+  warnings: string[];
+};
+
 type Message = {
   id?: string;
   role: "user" | "assistant";
@@ -87,10 +93,14 @@ export function Chat({
     e.preventDefault();
     const text = input.trim();
     if (!text || pending) return;
+    setInput("");
+    await sendText(text);
+  }
 
+  async function sendText(text: string) {
+    if (!text || pending) return;
     setError("");
     setMessages((m) => [...m, { role: "user", content: text }]);
-    setInput("");
     setPending(true);
 
     let assistantCitations: Citation[] = [];
@@ -247,7 +257,11 @@ export function Chat({
                 {!isUser && m.toolEvents && m.toolEvents.length > 0 && (
                   <div className="mt-2 space-y-2">
                     {m.toolEvents.map((te) => (
-                      <ToolEventCard key={te.id} event={te} />
+                      <ToolEventCard
+                        key={te.id}
+                        event={te}
+                        onConfirmPlan={() => sendText("✓ 確認，請依此計畫執行")}
+                      />
                     ))}
                   </div>
                 )}
@@ -324,7 +338,18 @@ const TOOL_META: Record<string, ToolMeta> = {
   },
 };
 
-function ToolEventCard({ event }: { event: ToolEvent }) {
+function ToolEventCard({
+  event,
+  onConfirmPlan,
+}: {
+  event: ToolEvent;
+  onConfirmPlan?: () => void;
+}) {
+  // Special render for propose_plan
+  if (event.name === "propose_plan") {
+    return <PlanCard event={event} onConfirm={onConfirmPlan} />;
+  }
+
   const meta = TOOL_META[event.name] ?? {
     runningLabel: `🔧 ${event.name}...`,
     successLabel: `✓ ${event.name} 完成`,
@@ -390,6 +415,85 @@ function ToolEventCard({ event }: { event: ToolEvent }) {
       )}
       {errorMsg && (
         <div className="mt-1 text-xs text-red-400 whitespace-pre-wrap">{errorMsg}</div>
+      )}
+    </div>
+  );
+}
+
+function PlanCard({
+  event,
+  onConfirm,
+}: {
+  event: ToolEvent;
+  onConfirm?: () => void;
+}) {
+  const isRunning = event.status === "running";
+  const result = event.result as
+    | { ok: true; awaiting_confirmation: boolean; plan: Plan }
+    | undefined;
+  const plan = result?.plan;
+  const [confirmed, setConfirmed] = useState(false);
+
+  if (isRunning) {
+    return (
+      <div className="border border-[var(--accent)]/40 bg-[var(--accent)]/5 p-3 text-xs">
+        <div className="flex items-center gap-2 font-mono tracking-wide text-[var(--accent)]">
+          <span className="spinner" />
+          📋 正在草擬計畫...
+        </div>
+      </div>
+    );
+  }
+
+  if (!plan) return null;
+
+  return (
+    <div className="border-2 border-[var(--accent)] bg-[var(--surface-2)] p-4 space-y-3">
+      <div className="flex items-center justify-between gap-2">
+        <div className="font-mono text-[10px] tracking-widest text-[var(--accent)]">
+          📋 計畫待確認
+        </div>
+        {confirmed && (
+          <span className="text-[10px] text-[var(--accent)] font-mono">✓ 已送出</span>
+        )}
+      </div>
+      <div className="text-sm font-bold leading-relaxed">{plan.goal}</div>
+      <ol className="space-y-1.5">
+        {plan.steps.map((s, i) => (
+          <li key={i} className="text-xs flex items-start gap-2">
+            <span className="font-mono text-[var(--muted)] shrink-0">{i + 1}.</span>
+            <div className="min-w-0">
+              <span className="font-mono text-[10px] text-[var(--accent)]">[{s.action}]</span>
+              <span className="ml-1.5 leading-relaxed">{s.description}</span>
+            </div>
+          </li>
+        ))}
+      </ol>
+      {plan.warnings && plan.warnings.length > 0 && (
+        <div className="border border-yellow-400/40 bg-yellow-400/5 p-2.5 space-y-1">
+          {plan.warnings.map((w, i) => (
+            <div key={i} className="text-[11px] text-yellow-300 leading-relaxed">
+              ⚠️ {w}
+            </div>
+          ))}
+        </div>
+      )}
+      {!confirmed ? (
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              setConfirmed(true);
+              onConfirm?.();
+            }}
+            className="bg-[var(--accent)] px-4 py-2 text-xs font-bold tracking-wide text-[var(--background)] hover:bg-[var(--accent-glow)] transition inline-flex items-center gap-1.5"
+          >
+            ✓ 確認執行
+          </button>
+          <span className="text-[10px] text-[var(--muted)]">或在輸入框打「取消」/「修改」讓 AI 調整</span>
+        </div>
+      ) : (
+        <div className="text-xs text-[var(--muted)]">已送出確認，等 AI 開始執行...</div>
       )}
     </div>
   );

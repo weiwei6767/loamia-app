@@ -7,10 +7,24 @@ import {
   executeGenerateReport,
   executeGenerateContent,
   executeGenerateReplySuggestions,
+  executeListDocuments,
+  executeListKols,
+  executeListScheduledPosts,
+  executeListPostTemplates,
+  executeListRecentReplies,
+  executeGetBrandIdentity,
+  executeListCompetitors,
+  executeSchedulePost,
+  executeCreateKol,
+  executeUpdateKolStatus,
+  executeMarkReplyOutcome,
+  executeProposePlan,
   type ReportToolInput,
   type ContentToolInput,
   type ReplyToolInput,
+  type PlanInput,
 } from "@/lib/ai/tools";
+import { runScheduler } from "@/lib/scheduler-runner";
 import { revalidatePath } from "next/cache";
 
 export const runtime = "nodejs";
@@ -35,7 +49,7 @@ function ndjson(obj: unknown): Uint8Array {
   return new TextEncoder().encode(JSON.stringify(obj) + "\n");
 }
 
-const MAX_AGENT_ITERATIONS = 4;
+const MAX_AGENT_ITERATIONS = 15;
 
 export async function POST(req: NextRequest) {
   let body: ChatBody;
@@ -196,29 +210,58 @@ export async function POST(req: NextRequest) {
           const toolResults: { type: "tool_result"; tool_use_id: string; content: string }[] = [];
           for (const tu of toolUses) {
             let resultPayload: unknown;
-            if (tu.name === "generate_report") {
-              resultPayload = await executeGenerateReport(
-                supabase,
-                brand,
-                user.id,
-                tu.input as ReportToolInput
-              );
-            } else if (tu.name === "generate_content") {
-              resultPayload = await executeGenerateContent(
-                supabase,
-                brand,
-                user.id,
-                tu.input as ContentToolInput
-              );
-            } else if (tu.name === "generate_reply_suggestions") {
-              resultPayload = await executeGenerateReplySuggestions(
-                supabase,
-                brand,
-                user.id,
-                tu.input as ReplyToolInput
-              );
-            } else {
-              resultPayload = { ok: false, error: `unknown tool: ${tu.name}` };
+            const input = tu.input as Record<string, unknown>;
+            switch (tu.name) {
+              case "generate_report":
+                resultPayload = await executeGenerateReport(supabase, brand, user.id, input as ReportToolInput);
+                break;
+              case "generate_content":
+                resultPayload = await executeGenerateContent(supabase, brand, user.id, input as ContentToolInput);
+                break;
+              case "generate_reply_suggestions":
+                resultPayload = await executeGenerateReplySuggestions(supabase, brand, user.id, input as ReplyToolInput);
+                break;
+              case "list_documents":
+                resultPayload = await executeListDocuments(supabase, brand.id, input as { limit?: number; tag?: string });
+                break;
+              case "list_kols":
+                resultPayload = await executeListKols(supabase, brand.id, input as { status?: string });
+                break;
+              case "list_scheduled_posts":
+                resultPayload = await executeListScheduledPosts(supabase, brand.id, input as { status?: string });
+                break;
+              case "list_post_templates":
+                resultPayload = await executeListPostTemplates(supabase, brand.id);
+                break;
+              case "list_recent_replies":
+                resultPayload = await executeListRecentReplies(supabase, brand.id, input as { limit?: number });
+                break;
+              case "get_brand_identity":
+                resultPayload = await executeGetBrandIdentity(supabase, brand.id);
+                break;
+              case "list_competitors":
+                resultPayload = await executeListCompetitors(supabase, brand.id);
+                break;
+              case "schedule_post":
+                resultPayload = await executeSchedulePost(supabase, brand, user.id, input as { text?: string; scheduled_at_iso?: string });
+                break;
+              case "create_kol":
+                resultPayload = await executeCreateKol(supabase, brand, user.id, input as Parameters<typeof executeCreateKol>[3]);
+                break;
+              case "update_kol_status":
+                resultPayload = await executeUpdateKolStatus(supabase, brand.id, input as { kol_id?: string; status?: string });
+                break;
+              case "mark_reply_outcome":
+                resultPayload = await executeMarkReplyOutcome(supabase, brand.id, input as { reply_id?: string; outcome?: string });
+                break;
+              case "run_scheduler_now":
+                resultPayload = await runScheduler(supabase, brand.id);
+                break;
+              case "propose_plan":
+                resultPayload = executeProposePlan(input as PlanInput);
+                break;
+              default:
+                resultPayload = { ok: false, error: `unknown tool: ${tu.name}` };
             }
 
             controller.enqueue(
@@ -241,6 +284,11 @@ export async function POST(req: NextRequest) {
           }
 
           claudeMessages.push({ role: "user", content: toolResults });
+
+          // If a plan was proposed, stop the agent loop and wait for the user to confirm
+          // (the user will send a follow-up message like "確認執行" which restarts the conversation)
+          const planProposed = toolUses.some((tu) => tu.name === "propose_plan");
+          if (planProposed) break;
         }
 
         // Persist assistant message
