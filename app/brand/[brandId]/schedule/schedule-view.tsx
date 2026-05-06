@@ -13,6 +13,7 @@ import {
   saveTemplateNextText,
   clearTemplateNextText,
   updateTemplatePrompt,
+  updateTemplateComments,
   type ScheduleState,
   type PreviewState,
 } from "./actions";
@@ -39,6 +40,7 @@ type Template = {
   next_run_at: string;
   active: boolean;
   next_post_text: string | null;
+  comments: string[];
 };
 
 const WEEKDAYS = ["週日", "週一", "週二", "週三", "週四", "週五", "週六"];
@@ -319,6 +321,18 @@ function TemplateScheduler({
             placeholder="AI Prompt（例：寫一則早安貼文，提及今日特餐，語氣親切活潑，不超過 200 字）"
             className="w-full border border-[var(--line)] bg-[var(--surface)] px-3 py-2 text-sm focus:border-[var(--accent)] focus:outline-none leading-relaxed"
           />
+          <div>
+            <label className="block text-[10px] font-mono tracking-wide text-[var(--muted)] mb-1">
+              💬 留言（選填，最多 10 則，每行一則，照順序回覆在貼文底下）
+            </label>
+            <textarea
+              name="comments"
+              rows={3}
+              maxLength={3000}
+              placeholder={`例：\n第一則留言：補充細節\n第二則留言：附上連結\n第三則留言：呼籲互動`}
+              className="w-full border border-[var(--line)] bg-[var(--surface)] px-3 py-2 text-sm focus:border-[var(--accent)] focus:outline-none leading-relaxed"
+            />
+          </div>
           <div className="flex items-center gap-3 flex-wrap">
             <select
               name="recurrence"
@@ -451,8 +465,128 @@ function TemplateCard({ template, brandId }: { template: Template; brandId: stri
       </div>
 
       <EditablePrompt template={template} brandId={brandId} onSaved={() => router.refresh()} />
+      <EditableComments template={template} brandId={brandId} onSaved={() => router.refresh()} />
       <EditableNextPost template={template} brandId={brandId} onChange={() => router.refresh()} />
     </li>
+  );
+}
+
+function EditableComments({
+  template,
+  brandId,
+  onSaved,
+}: {
+  template: Template;
+  brandId: string;
+  onSaved: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(template.comments.join("\n"));
+  const [pending, startTransition] = useTransition();
+  const [msg, setMsg] = useState<string | null>(null);
+
+  function save() {
+    setMsg(null);
+    const list = draft
+      .split(/\r?\n/)
+      .map((c) => c.trim())
+      .filter(Boolean);
+    startTransition(async () => {
+      const res = await updateTemplateComments(template.id, brandId, list);
+      if (res.ok) {
+        setEditing(false);
+        setMsg(`✓ 已儲存 ${list.length} 則`);
+        setTimeout(() => setMsg(null), 2500);
+        onSaved();
+      } else {
+        setMsg(`✕ ${res.error}`);
+      }
+    });
+  }
+
+  return (
+    <div className="border border-[var(--line)] bg-[var(--surface)]/50">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="w-full px-3 py-2 flex items-center justify-between text-[10px] font-mono tracking-wide text-[var(--muted)] hover:text-[var(--foreground)] transition"
+      >
+        <span>
+          💬 同步留言（{template.comments.length} 則）
+        </span>
+        <span>{open ? "▲" : "▼"}</span>
+      </button>
+      {open && (
+        <div className="px-3 pb-3 pt-1 border-t border-[var(--line)] space-y-2">
+          <p className="text-[10px] text-[var(--muted)] leading-relaxed">
+            貼文發送成功後，系統會依此清單**順序**留言在貼文底下（每行一則，最多 10 則）。
+          </p>
+          {editing ? (
+            <>
+              <textarea
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                rows={5}
+                maxLength={3000}
+                placeholder={`第一則留言\n第二則留言\n...`}
+                className="w-full border border-[var(--line)] bg-[var(--surface-2)] px-3 py-2 text-xs leading-relaxed focus:border-[var(--accent)] focus:outline-none"
+              />
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  disabled={pending}
+                  onClick={save}
+                  className="text-[10px] px-3 py-1 bg-[var(--accent)] text-[var(--background)] font-bold hover:bg-[var(--accent-glow)] transition disabled:opacity-50"
+                >
+                  {pending ? "儲存中..." : "✓ 儲存"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDraft(template.comments.join("\n"));
+                    setEditing(false);
+                  }}
+                  className="text-[10px] px-3 py-1 border border-[var(--line)] text-[var(--muted)]"
+                >
+                  取消
+                </button>
+                {msg && <span className="text-[10px] text-[var(--accent)]">{msg}</span>}
+              </div>
+            </>
+          ) : (
+            <>
+              {template.comments.length === 0 ? (
+                <p className="text-[10px] text-[var(--muted)]">尚未設定留言</p>
+              ) : (
+                <ol className="space-y-1">
+                  {template.comments.map((c, i) => (
+                    <li
+                      key={i}
+                      className="text-xs text-[var(--foreground)]/85 leading-relaxed pl-3 border-l-2 border-[var(--line)]"
+                    >
+                      <span className="text-[var(--accent)] font-mono mr-1">{i + 1}.</span>
+                      {c}
+                    </li>
+                  ))}
+                </ol>
+              )}
+              <button
+                type="button"
+                onClick={() => {
+                  setDraft(template.comments.join("\n"));
+                  setEditing(true);
+                }}
+                className="text-[10px] px-2 py-1 border border-[var(--line)] text-[var(--muted)] hover:border-[var(--accent)] hover:text-[var(--accent)] transition"
+              >
+                ✏️ 修改留言
+              </button>
+              {msg && <span className="ml-2 text-[10px] text-[var(--accent)]">{msg}</span>}
+            </>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 

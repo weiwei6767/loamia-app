@@ -120,6 +120,16 @@ export async function createPostTemplate(
   const intervalHoursRaw = String(formData.get("intervalHours") ?? "").trim();
   const tzOffsetMinutes = parseInt(String(formData.get("tzOffsetMinutes") ?? "0"), 10) || 0;
 
+  const commentsRaw = String(formData.get("comments") ?? "").trim();
+  const comments = commentsRaw
+    ? commentsRaw
+        .split(/\r?\n/)
+        .map((c) => c.trim())
+        .filter(Boolean)
+        .slice(0, 10)
+        .map((c) => c.slice(0, 500))
+    : [];
+
   const recurrence: Recurrence | null =
     recurrenceRaw === "daily" || recurrenceRaw === "weekly" || recurrenceRaw === "hourly"
       ? recurrenceRaw
@@ -175,6 +185,7 @@ export async function createPostTemplate(
     interval_hours: intervalHours,
     tz_offset_minutes: tzOffsetMinutes,
     next_run_at: next.toISOString(),
+    comments,
     active: true,
   });
   if (error) return { error: error.message };
@@ -267,6 +278,28 @@ export async function clearTemplateNextText(
     .update({ next_post_text: null })
     .eq("id", templateId);
   revalidatePath(`/brand/${brandId}/schedule`);
+}
+
+// Edit comments list of an existing template
+export async function updateTemplateComments(
+  templateId: string,
+  brandId: string,
+  comments: string[]
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (!templateId || !brandId) return { ok: false, error: "missing fields" };
+  const cleaned = comments
+    .map((c) => c.trim())
+    .filter(Boolean)
+    .slice(0, 10)
+    .map((c) => c.slice(0, 500));
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("post_templates")
+    .update({ comments: cleaned })
+    .eq("id", templateId);
+  if (error) return { ok: false, error: error.message };
+  revalidatePath(`/brand/${brandId}/schedule`);
+  return { ok: true };
 }
 
 // Edit the AI prompt of an existing template

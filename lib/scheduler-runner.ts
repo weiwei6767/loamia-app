@@ -1,6 +1,6 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { createPost } from "@/lib/threads/api";
+import { createPost, createReply } from "@/lib/threads/api";
 import { computeNextRun, type Recurrence } from "@/lib/scheduler";
 import { generateContentVariants } from "@/lib/ai/creative";
 
@@ -19,6 +19,7 @@ type ScheduledRow = {
   text: string;
   platform: string;
   scheduled_at: string;
+  template_id: string | null;
 };
 
 type TemplateRow = {
@@ -34,6 +35,7 @@ type TemplateRow = {
   tz_offset_minutes: number | null;
   next_run_at: string;
   next_post_text: string | null;
+  comments: string[] | null;
 };
 
 /**
@@ -53,7 +55,7 @@ export async function runScheduler(
   let tmplQuery = supabase
     .from("post_templates")
     .select(
-      "id, agency_id, brand_id, user_id, prompt, recurrence, weekday, time_of_day, interval_hours, tz_offset_minutes, next_run_at, next_post_text"
+      "id, agency_id, brand_id, user_id, prompt, recurrence, weekday, time_of_day, interval_hours, tz_offset_minutes, next_run_at, next_post_text, comments"
     )
     .eq("active", true)
     .lte("next_run_at", nowIso);
@@ -124,7 +126,7 @@ export async function runScheduler(
   // ── Scheduled posts due ──
   let postsQuery = supabase
     .from("scheduled_posts")
-    .select("id, agency_id, brand_id, text, platform, scheduled_at")
+    .select("id, agency_id, brand_id, text, platform, scheduled_at, template_id")
     .eq("status", "pending")
     .lte("scheduled_at", new Date().toISOString())
     .limit(20);
@@ -178,6 +180,31 @@ export async function runScheduler(
         })
         .eq("id", post.id);
       result.sent += 1;
+
+      // If post came from a template, post its comments under the new post in order
+      if (post.template_id) {
+        const { data: tmpl } = await supabase
+          .from("post_templates")
+          .select("comments")
+          .eq("id", post.template_id)
+          .single();
+        const comments = (tmpl?.comments as string[] | null) ?? [];
+        for (let i = 0; i < comments.length; i++) {
+          const commentText = (comments[i] ?? "").trim().slice(0, 500);
+          if (!commentText) continue;
+          try {
+            await createReply(
+              conn.platform_user_id as string,
+              conn.access_token as string,
+              commentText,
+              sent.id
+            );
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : "comment failed";
+            result.errors.push(`post ${post.id} comment ${i + 1}: ${msg}`);
+          }
+        }
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : "send failed";
       await supabase
