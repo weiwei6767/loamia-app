@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { useI18n } from "@/lib/i18n/provider";
 import { useTheme } from "@/lib/theme/provider";
@@ -106,6 +107,40 @@ export function SettingsWidget() {
               >
                 {t("settings.lang.en")}
               </button>
+            </div>
+          </div>
+
+          <div className="px-4 py-3 border-t" style={{ borderColor: "var(--line)" }}>
+            <div className="text-xs text-[var(--muted)] mb-2">{locale === "zh" ? "資訊與政策" : "Info & policies"}</div>
+            <div className="grid grid-cols-2 gap-1.5 text-xs">
+              <Link
+                href="/rules"
+                onClick={() => setOpen(false)}
+                className="px-2 py-1.5 border border-[var(--line)] text-[var(--muted)] hover:border-[var(--accent)] hover:text-[var(--accent)] transition text-center"
+              >
+                📋 {locale === "zh" ? "規則" : "Rules"}
+              </Link>
+              <Link
+                href="/privacy"
+                onClick={() => setOpen(false)}
+                className="px-2 py-1.5 border border-[var(--line)] text-[var(--muted)] hover:border-[var(--accent)] hover:text-[var(--accent)] transition text-center"
+              >
+                🔒 {locale === "zh" ? "隱私" : "Privacy"}
+              </Link>
+              <Link
+                href="/terms"
+                onClick={() => setOpen(false)}
+                className="px-2 py-1.5 border border-[var(--line)] text-[var(--muted)] hover:border-[var(--accent)] hover:text-[var(--accent)] transition text-center"
+              >
+                📜 {locale === "zh" ? "條款" : "Terms"}
+              </Link>
+              <Link
+                href="/data-deletion"
+                onClick={() => setOpen(false)}
+                className="px-2 py-1.5 border border-[var(--line)] text-[var(--muted)] hover:border-[var(--accent)] hover:text-[var(--accent)] transition text-center"
+              >
+                🗑 {locale === "zh" ? "刪除" : "Delete"}
+              </Link>
             </div>
           </div>
         </div>
