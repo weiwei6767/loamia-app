@@ -102,12 +102,14 @@ type KeywordSearchResponse = {
 export async function keywordSearch(
   token: string,
   query: string,
-  searchType: "TOP" | "RECENT" = "TOP"
+  searchType: "TOP" | "RECENT" = "TOP",
+  limit = 50
 ): Promise<ThreadsPost[]> {
   const params = new URLSearchParams({
     q: query,
     search_type: searchType,
     fields: "id,text,permalink,timestamp,username",
+    limit: String(limit),
     access_token: token,
   });
   const res = await fetch(`${GRAPH_BASE}/v1.0/keyword_search?${params.toString()}`);

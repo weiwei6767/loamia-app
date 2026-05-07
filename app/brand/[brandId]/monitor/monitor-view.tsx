@@ -11,6 +11,7 @@ import {
 } from "./actions";
 import { useI18n } from "@/lib/i18n/provider";
 import { ThreadsSection } from "./threads-section";
+import type { OutreachStatus } from "./actions";
 
 type MonitorRow = {
   id: string;
@@ -61,10 +62,12 @@ export function MonitorView({
   brandId,
   history,
   connection,
+  outreachStatus,
 }: {
   brandId: string;
   history: MonitorRow[];
   connection: ThreadsConnection | null;
+  outreachStatus: OutreachStatus;
 }) {
   const { t, locale } = useI18n();
   const router = useRouter();
@@ -164,6 +167,7 @@ export function MonitorView({
         brandId={brandId}
         connection={connection}
         onUsePost={fillFromThreadsPost}
+        outreachStatus={outreachStatus}
       />
 
       <form

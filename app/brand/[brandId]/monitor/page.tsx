@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getServerT } from "@/lib/i18n/server";
 import { BrandStatusToggle } from "../brand-status-toggle";
 import { MonitorView } from "./monitor-view";
+import { getOutreachStatus } from "./actions";
 
 type MonitorRow = {
   id: string;
@@ -88,6 +89,7 @@ export default async function MonitorPage({
                 }
               : null
           }
+          outreachStatus={await getOutreachStatus(brand.id)}
         />
     </div>
   );

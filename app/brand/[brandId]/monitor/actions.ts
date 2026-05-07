@@ -2,9 +2,12 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import { generateMonitorReplies } from "@/lib/ai/creative";
+import { generateMonitorReplies, generateOutreachReply } from "@/lib/ai/creative";
 import { keywordSearch, createReply, findPostIdByUrl, type ThreadsPost } from "@/lib/threads/api";
 import { recordWinningReplyFromMonitor } from "@/lib/ai/brand-brain";
+
+const OUTREACH_DAILY_LIMIT = 30;
+const OUTREACH_USERNAME_COOLDOWN_DAYS = 7;
 
 export type MonitorState =
   | undefined
@@ -175,6 +178,187 @@ export async function postThreadsReply(
   } catch (err) {
     return { error: err instanceof Error ? err.message : "發送失敗" };
   }
+}
+
+// ─── Outreach mode (semi-auto reply to public posts found via keyword search) ─────
+
+export type OutreachStatus = {
+  todaySent: number;
+  dailyLimit: number;
+  recentUsernames: string[]; // usernames replied within cooldown
+};
+
+export async function getOutreachStatus(brandId: string): Promise<OutreachStatus> {
+  const supabase = await createClient();
+  const startOfTodayUtc = new Date();
+  startOfTodayUtc.setUTCHours(0, 0, 0, 0);
+  const cooldownStart = new Date(
+    Date.now() - OUTREACH_USERNAME_COOLDOWN_DAYS * 24 * 60 * 60 * 1000
+  );
+
+  const [{ count }, { data: recents }] = await Promise.all([
+    supabase
+      .from("outreach_log")
+      .select("*", { count: "exact", head: true })
+      .eq("brand_id", brandId)
+      .gte("created_at", startOfTodayUtc.toISOString()),
+    supabase
+      .from("outreach_log")
+      .select("target_username")
+      .eq("brand_id", brandId)
+      .gte("created_at", cooldownStart.toISOString())
+      .not("target_username", "is", null),
+  ]);
+
+  const recentUsernames = Array.from(
+    new Set(((recents ?? []) as { target_username: string }[]).map((r) => r.target_username))
+  );
+
+  return {
+    todaySent: count ?? 0,
+    dailyLimit: OUTREACH_DAILY_LIMIT,
+    recentUsernames,
+  };
+}
+
+export type OutreachGenerateResult =
+  | { ok: true; reply: string }
+  | { ok: false; error: string };
+
+export async function generateOutreachReplyAction(
+  brandId: string,
+  post: { id: string; text?: string; username?: string },
+  keyword: string
+): Promise<OutreachGenerateResult> {
+  if (!brandId || !post?.id) return { ok: false, error: "missing fields" };
+  const supabase = await createClient();
+  const { data: brand } = await supabase
+    .from("brands")
+    .select("id, name")
+    .eq("id", brandId)
+    .single();
+  if (!brand) return { ok: false, error: "brand not found" };
+
+  try {
+    const result = await generateOutreachReply(
+      brand.id as string,
+      brand.name as string,
+      post.text ?? "",
+      post.username ?? null,
+      keyword
+    );
+    return { ok: true, reply: result.reply };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "AI 生成失敗" };
+  }
+}
+
+export type OutreachSendResult =
+  | { ok: true; replyId: string; todaySent: number }
+  | { ok: false; error: string; reason?: "limit" | "cooldown" | "no_conn" | "fail" };
+
+export async function sendOutreachReply(
+  brandId: string,
+  post: { id: string; permalink?: string; username?: string },
+  replyText: string,
+  keyword: string
+): Promise<OutreachSendResult> {
+  if (!brandId || !post?.id) return { ok: false, error: "missing fields", reason: "fail" };
+  const text = replyText.trim().slice(0, 200);
+  if (!text) return { ok: false, error: "留言內容不可為空", reason: "fail" };
+
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { ok: false, error: "未登入", reason: "fail" };
+
+  const { data: brand } = await supabase
+    .from("brands")
+    .select("id, agency_id")
+    .eq("id", brandId)
+    .single();
+  if (!brand) return { ok: false, error: "品牌不存在", reason: "fail" };
+
+  // Check daily limit
+  const startOfTodayUtc = new Date();
+  startOfTodayUtc.setUTCHours(0, 0, 0, 0);
+  const { count: todayCount } = await supabase
+    .from("outreach_log")
+    .select("*", { count: "exact", head: true })
+    .eq("brand_id", brandId)
+    .gte("created_at", startOfTodayUtc.toISOString());
+  if ((todayCount ?? 0) >= OUTREACH_DAILY_LIMIT) {
+    return {
+      ok: false,
+      error: `今日已達 ${OUTREACH_DAILY_LIMIT} 則上限，明天再試`,
+      reason: "limit",
+    };
+  }
+
+  // Check 7d username dedup
+  if (post.username) {
+    const cooldownStart = new Date(
+      Date.now() - OUTREACH_USERNAME_COOLDOWN_DAYS * 24 * 60 * 60 * 1000
+    );
+    const { data: dup } = await supabase
+      .from("outreach_log")
+      .select("id")
+      .eq("brand_id", brandId)
+      .eq("target_username", post.username)
+      .gte("created_at", cooldownStart.toISOString())
+      .limit(1);
+    if (dup && dup.length > 0) {
+      return {
+        ok: false,
+        error: `7 天內已對 @${post.username} 回過，避免被視為 spam`,
+        reason: "cooldown",
+      };
+    }
+  }
+
+  // Get Threads connection
+  const { data: conn } = await supabase
+    .from("social_connections")
+    .select("access_token, platform_user_id")
+    .eq("brand_id", brandId)
+    .eq("platform", "threads")
+    .single();
+  if (!conn?.access_token || !conn?.platform_user_id) {
+    return { ok: false, error: "尚未連接 Threads", reason: "no_conn" };
+  }
+
+  // Send the reply
+  let replyId: string;
+  try {
+    const result = await createReply(
+      conn.platform_user_id as string,
+      conn.access_token as string,
+      text,
+      post.id
+    );
+    replyId = result.id;
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : "發送失敗",
+      reason: "fail",
+    };
+  }
+
+  // Log
+  await supabase.from("outreach_log").insert({
+    brand_id: brandId,
+    agency_id: brand.agency_id,
+    user_id: user.id,
+    keyword: keyword.slice(0, 100),
+    target_post_id: post.id,
+    target_username: post.username ?? null,
+    target_permalink: post.permalink ?? null,
+    reply_text: text,
+    reply_id: replyId,
+  });
+
+  revalidatePath(`/brand/${brandId}/monitor`);
+  return { ok: true, replyId, todaySent: (todayCount ?? 0) + 1 };
 }
 
 // Mark outcome on a sent reply (replied / ignored / converted)

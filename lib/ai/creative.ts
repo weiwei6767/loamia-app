@@ -421,6 +421,76 @@ ${contextBlock}
   return { text: finalText, toolCalls, sources };
 }
 
+/**
+ * Generate a single contextual reply for OUTREACH on someone else's public Threads post.
+ * Tone: like a normal user joining the conversation, NOT a salesperson.
+ * Brand mention: optional, soft, only if natural.
+ */
+export async function generateOutreachReply(
+  brandId: string,
+  brandName: string,
+  targetText: string,
+  targetUsername: string | null,
+  keyword: string
+): Promise<{ reply: string }> {
+  const chunks = await retrieveRelevantChunks(brandId, `${keyword} ${targetText}`, "zh", 6);
+  const contextBlock =
+    chunks.length === 0
+      ? "（無相關歷史片段）"
+      : chunks.map((c, i) => `[${i + 1}] ${c.content}`).join("\n\n");
+
+  const supabase = await createClient();
+  const brainCtx = await assembleBrandBrainContext(supabase, brandId, "reply");
+  const brainBlock = brainCtx ? formatBrandBrainPrompt(brainCtx) : "";
+
+  const systemPrompt = `你是「${brandName}」品牌的社群參與助手。以下是 Threads 上一則公開貼文（不是給你的回覆，是別人發的話題），你要寫一則「自然加入討論」的留言。
+
+## 目標貼文
+${targetUsername ? `@${targetUsername}：` : ""}「${targetText.slice(0, 600)}」
+
+## 搜尋情境
+這篇貼文是用關鍵字「${keyword}」搜到的。
+
+${brainBlock ? `# Brand Brain\n${brainBlock}\n` : ""}
+## 品牌歷史片段參考
+${contextBlock}
+
+## 規則（違反就是 spam）
+1. **像一個真人網友**在路過參與討論，不是品牌客服
+2. 留言**不超過 80 字**（Threads 上太長會被忽略）
+3. 用繁體中文，口語自然，可以加 1-2 個 emoji
+4. **不要**貼網址、不要 hashtag 行銷、不要喊口號、不要叫對方私訊或 DM
+5. 品牌名「${brandName}」**最多提到一次**，而且必須是自然的「我自己也常喝/用 X」這種口吻；如果硬塞會很怪就不要提
+6. 如果貼文是抱怨／求助：先共感再分享經驗；不要直接推銷
+7. 如果貼文是分享心情／日常：留共鳴的留言即可，不必硬扯品牌
+8. **絕對禁止**：「歡迎來/快來/找我們」、「我們的產品」、「私訊我」、價格資訊、「歡迎詢問」
+9. 用 \`<reply>...</reply>\` 把最終留言包起來，標籤外可以放思考過程
+
+只輸出 1 則留言，不要多版本。`;
+
+  const client = await anthropic();
+  const response = await client.messages.stream({
+    model: CHAT_MODEL,
+    max_tokens: 800,
+    system: systemPrompt,
+    messages: [{ role: "user", content: "請寫這則留言。" }],
+  });
+
+  let raw = "";
+  for await (const event of response) {
+    if (event.type !== "content_block_delta") continue;
+    if (event.delta?.type !== "text_delta") continue;
+    if (event.delta.text) raw += event.delta.text;
+  }
+
+  // Extract from <reply>...</reply> if present, else use cleanGeneratedPost
+  const tagMatch = raw.match(/<reply[^>]*>([\s\S]*?)<\/reply>/i);
+  const inner = tagMatch ? tagMatch[1] : raw;
+  const reply = cleanGeneratedPost(inner).slice(0, 200);
+
+  return { reply };
+}
+
 const REPLY_SEPARATOR = "===REPLY===";
 
 export async function generateMonitorReplies(

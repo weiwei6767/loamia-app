@@ -1,12 +1,16 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import {
   searchThreads,
   disconnectThreads,
   postThreadsReply,
+  generateOutreachReplyAction,
+  sendOutreachReply,
   type ThreadsSearchState,
   type ThreadsReplyState,
+  type OutreachStatus,
 } from "./actions";
 import { useI18n } from "@/lib/i18n/provider";
 
@@ -27,10 +31,12 @@ export function ThreadsSection({
   brandId,
   connection,
   onUsePost,
+  outreachStatus,
 }: {
   brandId: string;
   connection: Connection | null;
   onUsePost: (post: ThreadsPost) => void;
+  outreachStatus: OutreachStatus;
 }) {
   const { t } = useI18n();
   const [state, action, pending] = useActionState<ThreadsSearchState, FormData>(
@@ -38,6 +44,8 @@ export function ThreadsSection({
     undefined
   );
   const [searchType, setSearchType] = useState<"TOP" | "RECENT">("TOP");
+  const [todaySent, setTodaySent] = useState(outreachStatus.todaySent);
+  const recentUsernamesSet = new Set(outreachStatus.recentUsernames);
 
   if (!connection) {
     return (
@@ -133,8 +141,11 @@ export function ThreadsSection({
 
       {state && "success" in state && state.success && (
         <div className="space-y-2">
-          <div className="font-mono text-xs tracking-widest text-[var(--muted)]">
-            {t("monitor.threads.results")} · {results.length} ·「{query}」
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <div className="font-mono text-xs tracking-widest text-[var(--muted)]">
+              {t("monitor.threads.results")} · {results.length} ·「{query}」
+            </div>
+            <OutreachCounter today={todaySent} limit={outreachStatus.dailyLimit} />
           </div>
           {results.length === 0 ? (
             <p className="text-sm text-[var(--muted)] py-4 text-center">
@@ -143,41 +154,16 @@ export function ThreadsSection({
           ) : (
             <ul className="space-y-2">
               {results.map((post) => (
-                <li
+                <OutreachRow
                   key={post.id}
-                  className="border border-[var(--line)] bg-[var(--surface-2)] p-3"
-                >
-                  <div className="flex items-center justify-between gap-2 mb-2 text-xs text-[var(--muted)]">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <span className="font-medium text-[var(--foreground)]">
-                        @{post.username ?? "unknown"}
-                      </span>
-                      {post.timestamp && (
-                        <span>· {new Date(post.timestamp).toLocaleDateString()}</span>
-                      )}
-                    </div>
-                    {post.permalink && (
-                      <a
-                        href={post.permalink}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-[var(--muted)] hover:text-[var(--accent)] text-[10px]"
-                      >
-                        {t("monitor.threads.open")} ↗
-                      </a>
-                    )}
-                  </div>
-                  <div className="text-sm leading-relaxed whitespace-pre-wrap mb-2">
-                    {post.text ?? "(no text)"}
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => onUsePost(post)}
-                    className="text-xs px-3 py-1.5 border border-[var(--accent)] text-[var(--accent)] hover:bg-[var(--accent)] hover:text-[var(--background)] transition"
-                  >
-                    ↓ {t("monitor.threads.use_post")}
-                  </button>
-                </li>
+                  brandId={brandId}
+                  post={post}
+                  keyword={query}
+                  cooldown={!!post.username && recentUsernamesSet.has(post.username)}
+                  atLimit={todaySent >= outreachStatus.dailyLimit}
+                  onSent={() => setTodaySent((n) => n + 1)}
+                  onUsePost={onUsePost}
+                />
               ))}
             </ul>
           )}
@@ -245,6 +231,232 @@ function DirectReplyForm({ brandId }: { brandId: string }) {
         )}
       </button>
     </form>
+  );
+}
+
+function OutreachCounter({ today, limit }: { today: number; limit: number }) {
+  const remaining = Math.max(0, limit - today);
+  const danger = remaining === 0;
+  const warn = remaining > 0 && remaining <= 5;
+  return (
+    <span
+      className={`text-[10px] font-mono tracking-wide px-2 py-1 border ${
+        danger
+          ? "border-red-400/60 text-red-400 bg-red-400/5"
+          : warn
+            ? "border-yellow-400/60 text-yellow-400 bg-yellow-400/5"
+            : "border-[var(--accent)]/40 text-[var(--accent)] bg-[var(--accent)]/5"
+      }`}
+      title="海巡每日總量上限"
+    >
+      🌊 今日已送 {today} / {limit}
+    </span>
+  );
+}
+
+type OutreachState =
+  | { kind: "idle" }
+  | { kind: "generating" }
+  | { kind: "ready"; text: string }
+  | { kind: "sending" }
+  | { kind: "sent"; permalink?: string }
+  | { kind: "error"; error: string };
+
+function OutreachRow({
+  brandId,
+  post,
+  keyword,
+  cooldown,
+  atLimit,
+  onSent,
+  onUsePost,
+}: {
+  brandId: string;
+  post: ThreadsPost;
+  keyword: string;
+  cooldown: boolean;
+  atLimit: boolean;
+  onSent: () => void;
+  onUsePost: (post: ThreadsPost) => void;
+}) {
+  const router = useRouter();
+  const [state, setState] = useState<OutreachState>({ kind: "idle" });
+  const [, startTransition] = useTransition();
+
+  async function generate() {
+    setState({ kind: "generating" });
+    const res = await generateOutreachReplyAction(
+      brandId,
+      { id: post.id, text: post.text, username: post.username },
+      keyword
+    );
+    if (res.ok) setState({ kind: "ready", text: res.reply });
+    else setState({ kind: "error", error: res.error });
+  }
+
+  async function send() {
+    if (state.kind !== "ready") return;
+    const text = state.text.trim();
+    if (!text) return;
+    setState({ kind: "sending" });
+    const res = await sendOutreachReply(
+      brandId,
+      { id: post.id, permalink: post.permalink, username: post.username },
+      text,
+      keyword
+    );
+    if (res.ok) {
+      setState({ kind: "sent", permalink: post.permalink });
+      onSent();
+      startTransition(() => router.refresh());
+    } else {
+      setState({ kind: "error", error: res.error });
+    }
+  }
+
+  const blocked = cooldown || atLimit;
+
+  return (
+    <li className="border border-[var(--line)] bg-[var(--surface-2)] p-3">
+      <div className="flex items-center justify-between gap-2 mb-2 text-xs text-[var(--muted)]">
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="font-medium text-[var(--foreground)]">
+            @{post.username ?? "unknown"}
+          </span>
+          {post.timestamp && (
+            <span>· {new Date(post.timestamp).toLocaleDateString()}</span>
+          )}
+        </div>
+        {post.permalink && (
+          <a
+            href={post.permalink}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-[var(--muted)] hover:text-[var(--accent)] text-[10px]"
+          >
+            原貼文 ↗
+          </a>
+        )}
+      </div>
+      <div className="text-sm leading-relaxed whitespace-pre-wrap mb-2">
+        {post.text ?? "(no text)"}
+      </div>
+
+      {/* Outreach panel */}
+      <div className="border-t border-[var(--line)] pt-2 mt-2 space-y-2">
+        {state.kind === "idle" && (
+          <div className="flex items-center gap-2 flex-wrap">
+            {cooldown ? (
+              <span className="text-[11px] text-yellow-400">
+                ⊘ 7 天內已對 @{post.username} 回過，跳過避免被視為 spam
+              </span>
+            ) : atLimit ? (
+              <span className="text-[11px] text-red-400">
+                ⊘ 今日上限已滿，明天再試
+              </span>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={generate}
+                  className="text-xs px-3 py-1.5 border border-[var(--accent)] text-[var(--accent)] hover:bg-[var(--accent)] hover:text-[var(--background)] transition"
+                >
+                  ✨ AI 寫留言
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onUsePost(post)}
+                  className="text-xs px-3 py-1.5 border border-[var(--line)] text-[var(--muted)] hover:border-[var(--accent)] hover:text-[var(--accent)] transition"
+                  title="改用下方手動三建議模式"
+                >
+                  ↓ 改手動模式
+                </button>
+              </>
+            )}
+          </div>
+        )}
+
+        {state.kind === "generating" && (
+          <div className="text-xs text-[var(--muted)] inline-flex items-center gap-2">
+            <span className="spinner" /> AI 正在寫留言…
+          </div>
+        )}
+
+        {state.kind === "ready" && (
+          <>
+            <textarea
+              value={state.text}
+              onChange={(e) => setState({ kind: "ready", text: e.target.value })}
+              rows={3}
+              maxLength={200}
+              className="w-full text-sm leading-relaxed border border-[var(--accent)]/40 bg-[var(--background)] px-2 py-1.5 focus:border-[var(--accent)] focus:outline-none"
+            />
+            <div className="flex items-center gap-2 flex-wrap">
+              <button
+                type="button"
+                onClick={send}
+                disabled={blocked || !state.text.trim()}
+                className="text-xs px-3 py-1.5 bg-[var(--accent)] text-[var(--background)] font-bold hover:bg-[var(--accent-glow)] transition disabled:opacity-50"
+              >
+                📤 送出此留言
+              </button>
+              <button
+                type="button"
+                onClick={generate}
+                className="text-xs px-3 py-1.5 border border-[var(--line)] text-[var(--muted)] hover:border-[var(--accent)] hover:text-[var(--accent)] transition"
+              >
+                ↻ 重生
+              </button>
+              <button
+                type="button"
+                onClick={() => setState({ kind: "idle" })}
+                className="text-xs px-3 py-1.5 border border-[var(--line)] text-[var(--muted)] hover:text-[var(--foreground)] transition"
+              >
+                ✕ 取消
+              </button>
+              <span className="text-[10px] text-[var(--muted)]">
+                {state.text.length}/200
+              </span>
+            </div>
+          </>
+        )}
+
+        {state.kind === "sending" && (
+          <div className="text-xs text-[var(--muted)] inline-flex items-center gap-2">
+            <span className="spinner" /> 送出中（Threads 容器需 2-15 秒）…
+          </div>
+        )}
+
+        {state.kind === "sent" && (
+          <div className="text-xs text-[var(--accent)] inline-flex items-center gap-2">
+            ✓ 已送出！
+            {state.permalink && (
+              <a
+                href={state.permalink}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline"
+              >
+                查看原貼文 ↗
+              </a>
+            )}
+          </div>
+        )}
+
+        {state.kind === "error" && (
+          <div className="space-y-1">
+            <p className="text-xs text-red-400">✕ {state.error}</p>
+            <button
+              type="button"
+              onClick={() => setState({ kind: "idle" })}
+              className="text-[10px] text-[var(--muted)] hover:text-[var(--foreground)] underline"
+            >
+              重試
+            </button>
+          </div>
+        )}
+      </div>
+    </li>
   );
 }
 
