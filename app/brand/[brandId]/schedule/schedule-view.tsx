@@ -45,6 +45,10 @@ type Template = {
   enable_web_tools: boolean;
 };
 
+type PendingItem =
+  | { kind: "post"; post: Post; scheduledAt: string }
+  | { kind: "template"; template: Template; scheduledAt: string };
+
 const WEEKDAYS = ["週日", "週一", "週二", "週三", "週四", "週五", "週六"];
 
 function localToUtcIso(local: string): string {
@@ -71,7 +75,15 @@ export function ScheduleView({
   posts: Post[];
   templates: Template[];
 }) {
-  const pending = posts.filter((p) => p.status === "pending").sort((a, b) => +new Date(a.scheduled_at) - +new Date(b.scheduled_at));
+  const realPending: PendingItem[] = posts
+    .filter((p) => p.status === "pending")
+    .map((p) => ({ kind: "post" as const, post: p, scheduledAt: p.scheduled_at }));
+  const templatePending: PendingItem[] = templates
+    .filter((t) => t.active)
+    .map((t) => ({ kind: "template" as const, template: t, scheduledAt: t.next_run_at }));
+  const pending: PendingItem[] = [...realPending, ...templatePending].sort(
+    (a, b) => +new Date(a.scheduledAt) - +new Date(b.scheduledAt)
+  );
   const history = posts.filter((p) => p.status !== "pending");
 
   return (
@@ -861,7 +873,7 @@ function EditableNextPost({
   );
 }
 
-function PendingList({ posts, brandId }: { posts: Post[]; brandId: string }) {
+function PendingList({ posts, brandId }: { posts: PendingItem[]; brandId: string }) {
   const [pending, startTransition] = useTransition();
 
   return (
@@ -873,31 +885,77 @@ function PendingList({ posts, brandId }: { posts: Post[]; brandId: string }) {
         <p className="text-xs text-[var(--muted)]">無待發送貼文</p>
       ) : (
         <ul className="space-y-2">
-          {posts.map((p) => (
-            <li
-              key={p.id}
-              className="border border-[var(--line)] bg-[var(--surface-2)] p-3 flex items-start gap-3"
-            >
-              <div className="min-w-0 flex-1">
-                <div className="text-[10px] text-[var(--accent)] font-mono">
-                  {new Date(p.scheduled_at).toLocaleString()}
-                  {p.template_id ? " · 來自模板" : ""}
-                </div>
-                <div className="mt-1 text-sm leading-relaxed whitespace-pre-wrap line-clamp-3">{p.text}</div>
-              </div>
-              <button
-                type="button"
-                disabled={pending}
-                onClick={() => {
-                  if (!confirm("取消這則排程？")) return;
-                  startTransition(() => cancelScheduledPost(p.id, brandId));
-                }}
-                className="shrink-0 text-[10px] px-2 py-1 border border-[var(--line)] text-[var(--muted)] hover:border-red-400 hover:text-red-400 transition disabled:opacity-50"
+          {posts.map((item) => {
+            if (item.kind === "post") {
+              const p = item.post;
+              return (
+                <li
+                  key={`p-${p.id}`}
+                  className="border border-[var(--line)] bg-[var(--surface-2)] p-3 flex items-start gap-3"
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="text-[10px] text-[var(--accent)] font-mono">
+                      {new Date(p.scheduled_at).toLocaleString()}
+                      {p.template_id ? " · 來自模板" : ""}
+                    </div>
+                    <div className="mt-1 text-sm leading-relaxed whitespace-pre-wrap line-clamp-3">{p.text}</div>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={pending}
+                    onClick={() => {
+                      if (!confirm("取消這則排程？")) return;
+                      startTransition(() => cancelScheduledPost(p.id, brandId));
+                    }}
+                    className="shrink-0 text-[10px] px-2 py-1 border border-[var(--line)] text-[var(--muted)] hover:border-red-400 hover:text-red-400 transition disabled:opacity-50"
+                  >
+                    ✕ 取消
+                  </button>
+                </li>
+              );
+            }
+            const t = item.template;
+            const hasLocked = !!(t.next_post_text && t.next_post_text.trim());
+            return (
+              <li
+                key={`t-${t.id}`}
+                className="border border-dashed border-[var(--accent)]/50 bg-[var(--surface-2)] p-3 flex items-start gap-3"
               >
-                ✕ 取消
-              </button>
-            </li>
-          ))}
+                <div className="min-w-0 flex-1">
+                  <div className="text-[10px] text-[var(--accent)] font-mono flex items-center gap-2 flex-wrap">
+                    <span>{new Date(t.next_run_at).toLocaleString()}</span>
+                    <span>· 🤖 模板「{t.name}」</span>
+                    {t.enable_web_tools && <span>· 🌐 上網</span>}
+                    {hasLocked ? (
+                      <span className="text-[var(--accent)]">· 🔒 已鎖定下篇</span>
+                    ) : (
+                      <span className="text-[var(--muted)]">· AI 屆時生成</span>
+                    )}
+                  </div>
+                  <div className="mt-1 text-sm leading-relaxed whitespace-pre-wrap line-clamp-3">
+                    {hasLocked ? (
+                      t.next_post_text
+                    ) : (
+                      <span className="text-[var(--muted)] italic">
+                        ─ AI 將依模板 prompt 在執行時生成內容 ─
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  disabled={pending}
+                  onClick={() =>
+                    startTransition(() => toggleTemplateActive(t.id, false, brandId))
+                  }
+                  title="暫停這個模板（不刪除）"
+                  className="shrink-0 text-[10px] px-2 py-1 border border-[var(--line)] text-[var(--muted)] hover:border-[var(--accent)] hover:text-[var(--accent)] transition disabled:opacity-50"
+                >
+                  ⏸ 暫停模板
+                </button>
+              </li>
+            );
+          })}
         </ul>
       )}
     </section>
