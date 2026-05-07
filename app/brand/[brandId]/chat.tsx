@@ -2,6 +2,8 @@
 
 import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { CitationModal } from "./citation-modal";
 import { useI18n } from "@/lib/i18n/provider";
 
@@ -238,18 +240,101 @@ export function Chat({
               <div className={`max-w-[88%] ${isUser ? "" : "w-full"}`}>
                 {hasContent && (
                   <div
-                    className={`whitespace-pre-wrap text-sm leading-relaxed px-4 py-3 ${
+                    className={`text-sm leading-relaxed px-4 py-3 ${
                       isUser
-                        ? "bg-[var(--accent)] text-[var(--background)] font-medium"
-                        : "bg-[var(--surface)] border border-[var(--line)]"
+                        ? "bg-[var(--accent)] text-[var(--background)] font-medium whitespace-pre-wrap"
+                        : "bg-[var(--surface)] border border-[var(--line)] chat-md"
                     }`}
                   >
                     {showThinking ? (
                       <span className="inline-flex items-center gap-2 text-[var(--muted)]">
                         <span className="spinner" /> {t("chat.thinking")}
                       </span>
-                    ) : (
+                    ) : isUser ? (
                       m.content
+                    ) : (
+                      <ReactMarkdown
+                        remarkPlugins={[remarkGfm]}
+                        components={{
+                          a: ({ href, children, ...props }) => (
+                            <a
+                              {...props}
+                              href={href}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-[var(--accent)] underline hover:text-[var(--accent-glow)]"
+                            >
+                              {children}
+                            </a>
+                          ),
+                          table: ({ children }) => (
+                            <div className="overflow-x-auto my-2">
+                              <table className="text-xs border-collapse border border-[var(--line)] w-full">
+                                {children}
+                              </table>
+                            </div>
+                          ),
+                          th: ({ children }) => (
+                            <th className="border border-[var(--line)] px-2 py-1 bg-[var(--surface-2)] font-bold text-left">
+                              {children}
+                            </th>
+                          ),
+                          td: ({ children }) => (
+                            <td className="border border-[var(--line)] px-2 py-1 align-top">
+                              {children}
+                            </td>
+                          ),
+                          code: ({ className, children, ...props }) => {
+                            const inline = !className;
+                            return inline ? (
+                              <code
+                                className="px-1 py-0.5 bg-[var(--surface-2)] text-[var(--accent)] font-mono text-[12px]"
+                                {...props}
+                              >
+                                {children}
+                              </code>
+                            ) : (
+                              <code
+                                className="block p-3 bg-[var(--surface-2)] border border-[var(--line)] font-mono text-[12px] overflow-x-auto"
+                                {...props}
+                              >
+                                {children}
+                              </code>
+                            );
+                          },
+                          ul: ({ children }) => (
+                            <ul className="list-disc pl-5 space-y-0.5 my-1">{children}</ul>
+                          ),
+                          ol: ({ children }) => (
+                            <ol className="list-decimal pl-5 space-y-0.5 my-1">{children}</ol>
+                          ),
+                          h1: ({ children }) => (
+                            <h1 className="text-base font-bold mt-3 mb-1">{children}</h1>
+                          ),
+                          h2: ({ children }) => (
+                            <h2 className="text-sm font-bold mt-3 mb-1">{children}</h2>
+                          ),
+                          h3: ({ children }) => (
+                            <h3 className="text-sm font-semibold mt-2 mb-1">{children}</h3>
+                          ),
+                          p: ({ children }) => <p className="my-1">{children}</p>,
+                          blockquote: ({ children }) => (
+                            <blockquote className="border-l-2 border-[var(--accent)] pl-3 my-2 text-[var(--muted)]">
+                              {children}
+                            </blockquote>
+                          ),
+                          img: ({ src, alt }) => (
+                            <img
+                              src={src ?? ""}
+                              alt={alt ?? ""}
+                              className="max-w-full h-auto my-2 border border-[var(--line)]"
+                              loading="lazy"
+                            />
+                          ),
+                        }}
+                      >
+                        {m.content}
+                      </ReactMarkdown>
                     )}
                   </div>
                 )}

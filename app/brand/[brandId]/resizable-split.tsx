@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 
 const STORAGE_KEY = "loamia.rightChatWidth";
+const COLLAPSED_KEY = "loamia.rightChatCollapsed";
 const MIN = 320;
 const MAX = 720;
 const DEFAULT = 400;
@@ -17,23 +18,31 @@ export function ResizableSplit({
   const [chatWidth, setChatWidth] = useState(DEFAULT);
   const [hydrated, setHydrated] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [collapsed, setCollapsed] = useState(false);
   const draggingRef = useRef(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Load persisted width
+  // Load persisted width + collapsed state
   useEffect(() => {
     setHydrated(true);
-    const stored = typeof window !== "undefined" ? window.localStorage.getItem(STORAGE_KEY) : null;
+    if (typeof window === "undefined") return;
+    const stored = window.localStorage.getItem(STORAGE_KEY);
     if (stored) {
       const n = parseInt(stored, 10);
       if (!Number.isNaN(n) && n >= MIN && n <= MAX) setChatWidth(n);
     }
+    const c = window.localStorage.getItem(COLLAPSED_KEY);
+    if (c === "1") setCollapsed(true);
   }, []);
 
   // Persist on change
   useEffect(() => {
     if (hydrated) window.localStorage.setItem(STORAGE_KEY, String(chatWidth));
   }, [chatWidth, hydrated]);
+
+  useEffect(() => {
+    if (hydrated) window.localStorage.setItem(COLLAPSED_KEY, collapsed ? "1" : "0");
+  }, [collapsed, hydrated]);
 
   function onMouseDown(e: React.MouseEvent) {
     e.preventDefault();
@@ -68,21 +77,47 @@ export function ResizableSplit({
     <div ref={containerRef} className="flex flex-1 overflow-hidden h-full relative">
       <main className="flex-1 min-w-0 overflow-y-auto">{children}</main>
 
-      {/* xl+: inline resizable chat */}
-      <div
-        role="separator"
-        aria-orientation="vertical"
-        onMouseDown={onMouseDown}
-        onDoubleClick={() => setChatWidth(DEFAULT)}
-        className="hidden xl:block w-1 cursor-col-resize bg-[var(--line)] hover:bg-[var(--accent)]/40 transition shrink-0"
-        title="拖曳調整寬度（雙擊重設）"
-      />
-      <aside
-        className="border-l border-[var(--line)] overflow-hidden hidden xl:flex flex-col bg-[var(--surface)]/40 shrink-0"
-        style={{ width: hydrated ? `${chatWidth}px` : `${DEFAULT}px` }}
-      >
-        {rightContent}
-      </aside>
+      {/* xl+: inline resizable chat (hidden when collapsed) */}
+      {!collapsed && (
+        <>
+          <div
+            role="separator"
+            aria-orientation="vertical"
+            onMouseDown={onMouseDown}
+            onDoubleClick={() => setChatWidth(DEFAULT)}
+            className="hidden xl:block w-1 cursor-col-resize bg-[var(--line)] hover:bg-[var(--accent)]/40 transition shrink-0"
+            title="拖曳調整寬度（雙擊重設）"
+          />
+          <aside
+            className="border-l border-[var(--line)] overflow-hidden hidden xl:flex flex-col bg-[var(--surface)]/40 shrink-0 relative"
+            style={{ width: hydrated ? `${chatWidth}px` : `${DEFAULT}px` }}
+          >
+            <button
+              type="button"
+              onClick={() => setCollapsed(true)}
+              className="absolute top-2 right-2 z-10 w-7 h-7 flex items-center justify-center text-[var(--muted)] hover:text-[var(--foreground)] hover:bg-[var(--surface-2)] border border-[var(--line)] text-xs"
+              aria-label="收合對話面板"
+              title="收合對話面板"
+            >
+              →|
+            </button>
+            {rightContent}
+          </aside>
+        </>
+      )}
+
+      {/* xl+: floating button when collapsed */}
+      {collapsed && (
+        <button
+          type="button"
+          onClick={() => setCollapsed(false)}
+          className="hidden xl:flex fixed bottom-6 right-6 z-30 w-12 h-12 rounded-full bg-[var(--accent)] text-[var(--background)] shadow-2xl items-center justify-center text-xl font-bold hover:scale-110 active:scale-95 transition"
+          aria-label="開啟 Brand Brain 對話"
+          title="開啟 Brand Brain"
+        >
+          💬
+        </button>
+      )}
 
       {/* < xl: floating button + slide-out drawer */}
       {!drawerOpen && (
