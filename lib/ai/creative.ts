@@ -109,11 +109,11 @@ ${contextBlock}
 
   const variants = raw
     .split(VARIANT_SEPARATOR)
-    .map((v) => v.trim())
+    .map((v) => cleanGeneratedPost(v))
     .filter((v) => v.length > 10);
 
   return {
-    variants: variants.length > 0 ? variants : [raw.trim()],
+    variants: variants.length > 0 ? variants : [cleanGeneratedPost(raw)],
     sources: chunks.map((c) => c.filename).filter(Boolean),
   };
 }
@@ -126,6 +126,80 @@ ${contextBlock}
  *  - Hard cap: max 5 tool turns
  *  - Returns single post text (≤500 chars)
  */
+/**
+ * Defensive cleaner — strips AI meta commentary that leaked past the prompt.
+ * Catches both <post>...</post> wrappers and free-form preambles.
+ *
+ * Why: agentic Anthropic responses sometimes prepend status sentences
+ * ("搜尋結果有限，我將..."), which look like bot output to readers and
+ * to platform anti-spam. This is the LAST line of defense before publishing.
+ */
+function cleanGeneratedPost(raw: string): string {
+  let text = raw.trim();
+
+  // 1) Prefer <post>...</post> envelope if present
+  const tagMatch = text.match(/<post[^>]*>([\s\S]*?)<\/post>/i);
+  if (tagMatch) {
+    text = tagMatch[1].trim();
+  }
+
+  // 2) Strip any remaining stray opening/closing tag fragments
+  text = text.replace(/<\/?post[^>]*>/gi, "").trim();
+
+  // 3) If a "---" separator appears within first 250 chars, take what's AFTER
+  const sepIdx = text.indexOf("---");
+  if (sepIdx >= 0 && sepIdx < 250) {
+    const after = text.slice(sepIdx + 3).trim();
+    if (after.length > 30) text = after;
+  }
+
+  // 4) Drop leading lines that match known meta patterns
+  const metaPatterns = [
+    /^(好的|沒問題|了解|收到|感謝)/,
+    /^(以下是|這是)/,
+    /^(我[將會來想要]|讓我)/,
+    /^(根據|依據|基於|參考).*?(資料|內容|品牌|prompt|Identity|Brain|搜尋)/,
+    /^(搜尋|查詢|找到|資料|內容).*?(結果|有限|不足|無法)/,
+    /Brand\s*(Identity|Brain)/i,
+    /^.{0,50}(生成|撰寫|寫).{0,30}(貼文|內容|這則)/,
+    /^---+$/,
+  ];
+  const lines = text.split(/\r?\n/);
+  let drop = 0;
+  while (drop < lines.length) {
+    const ln = lines[drop].trim();
+    if (!ln) {
+      drop += 1;
+      continue;
+    }
+    const looksMeta = metaPatterns.some((re) => re.test(ln));
+    if (!looksMeta) break;
+    drop += 1;
+  }
+  if (drop > 0) text = lines.slice(drop).join("\n").trim();
+
+  // 5) Strip trailing meta lines too (e.g. AI explaining what it did at the end)
+  const trailing: RegExp[] = [
+    /^希望.{0,20}(這|這則|這篇)/,
+    /^以上.{0,20}(是|為)/,
+    /^(備註|附註|說明)[:：]/,
+  ];
+  const lines2 = text.split(/\r?\n/);
+  let cut = lines2.length;
+  for (let i = lines2.length - 1; i >= 0; i--) {
+    const ln = lines2[i].trim();
+    if (!ln) {
+      cut = i;
+      continue;
+    }
+    if (trailing.some((re) => re.test(ln))) cut = i;
+    else break;
+  }
+  text = lines2.slice(0, cut).join("\n").trim();
+
+  return text.slice(0, 500);
+}
+
 export type GenEvent =
   | { stage: "context" }
   | { stage: "thinking"; turn: number }
@@ -173,13 +247,31 @@ ${contextBlock}
 2. **絕對不可在 query 內**包含品牌私有資訊：使用者私存的品牌名（除非廣為人知）、客戶聯絡資料、合作費率、KOL 名單、未公開檔期、Brand Identity 細節、Winning Memory
 3. query 想拿時事題材時：搜尋「該產業／類別／節氣／日期」，不要把品牌名、客戶名塞進去
 4. 至多呼叫 5 次工具，超過要立刻收斂出最終貼文
-5. 完成後直接輸出最終貼文文字（不超過 500 字、繁體中文、無前言、無「以下是貼文」這類說明），數字事實要有公開來源
+5. 數字事實要有公開來源
+
+## ⚠️ 輸出格式（這是給 Threads 上真正讀者看的，不是給我）
+**最終貼文必須用 \`<post>\` 與 \`</post>\` 標籤包起來。**
+標籤之外可以放你的思考過程，但**標籤之內絕對不能出現以下內容**：
+- 任何狀態說明（「搜尋結果有限」「我將以...為基礎」「資料中沒有」「以下是」「好的」「讓我」）
+- 任何提到 AI、Brand Identity、Brand Brain、模板、prompt、品牌資料的詞
+- 任何「我會 / 我將 / 我來 / 我幫你」的自述
+- 任何分隔線（---）、章節標題（## 之類）、給我的提示
+- 任何「根據資料」「依據品牌」這類 meta 字句
+
+標籤之內**只放可以直接貼到 Threads 給粉絲讀的最終文字**，繁體中文，500 字內。
+
+範例：
+\`<post>
+今天有發現一個小細節想跟大家分享...
+... 你呢？
+</post>\`
 
 ## 規則
 1. 用繁體中文
 2. 只輸出 1 則貼文（不要多個變體）
 3. 風格要呼應品牌調性，遵守 Brand Identity 禁忌詞
-4. 數字／事實只能來自上方資料 + 你搜到的公開內容；資料中沒的避免具體數字`;
+4. 數字／事實只能來自上方資料 + 你搜到的公開內容；資料中沒的避免具體數字
+5. 想不到要寫什麼也不要解釋，就照模板 prompt 的精神硬寫一則正常貼文`;
 
   const tools = [
     {
@@ -226,15 +318,13 @@ ${contextBlock}
 
     if (resp.stop_reason !== "tool_use") {
       onEvent?.({ stage: "writing" });
-      // Extract final text
-      const text = blocks
+      const raw = blocks
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         .filter((b: any) => b.type === "text")
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         .map((b: any) => String(b.text ?? ""))
-        .join("\n")
-        .trim()
-        .slice(0, 500);
+        .join("\n");
+      const text = cleanGeneratedPost(raw);
       onEvent?.({ stage: "done", text });
       return { text, toolCalls, sources };
     }
@@ -320,15 +410,13 @@ ${contextBlock}
     system: systemPrompt + "\n\n達到工具呼叫上限，請依目前資訊立刻輸出最終貼文。",
     messages,
   });
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const finalText = (final.content as any[])
+  const finalRaw = (final.content as unknown[])
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     .filter((b: any) => b.type === "text")
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     .map((b: any) => String(b.text ?? ""))
-    .join("\n")
-    .trim()
-    .slice(0, 500);
+    .join("\n");
+  const finalText = cleanGeneratedPost(finalRaw);
   onEvent?.({ stage: "done", text: finalText });
   return { text: finalText, toolCalls, sources };
 }
