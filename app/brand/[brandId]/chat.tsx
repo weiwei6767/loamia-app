@@ -351,20 +351,41 @@ export function Chat({
                   </div>
                 )}
 
-                {!isUser && m.citations && m.citations.length > 0 && (
-                  <div className="mt-2 flex flex-wrap gap-1.5">
-                    {m.citations.map((c, idx) => (
-                      <button
-                        key={c.id}
-                        onClick={() => setOpenCitation(c)}
-                        className="text-xs px-2 py-1 bg-[var(--surface-2)] border border-[var(--line)] hover:border-[var(--accent)] text-[var(--muted)] hover:text-[var(--foreground)] transition"
-                        title={c.filename}
-                      >
-                        [{idx + 1}] {c.filename}
-                      </button>
-                    ))}
-                  </div>
-                )}
+                {!isUser && m.citations && m.citations.length > 0 && (() => {
+                  const groups = new Map<string, { citation: Citation; index: number }[]>();
+                  m.citations.forEach((c, idx) => {
+                    const arr = groups.get(c.filename) ?? [];
+                    arr.push({ citation: c, index: idx + 1 });
+                    groups.set(c.filename, arr);
+                  });
+                  return (
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {Array.from(groups.entries()).map(([filename, items]) => (
+                        <div
+                          key={filename}
+                          className="flex items-center gap-1.5 text-xs px-2 py-1 bg-[var(--surface-2)] border border-[var(--line)]"
+                          title={filename}
+                        >
+                          <span className="text-[var(--muted)] truncate max-w-[220px]">
+                            📄 {filename}
+                          </span>
+                          <div className="flex gap-0.5">
+                            {items.map(({ citation, index }) => (
+                              <button
+                                key={citation.id}
+                                onClick={() => setOpenCitation(citation)}
+                                className="px-1 text-[var(--accent)] hover:bg-[var(--accent)] hover:text-[var(--background)] transition font-mono"
+                                title={`引用片段 ${index}`}
+                              >
+                                [{index}]
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })()}
               </div>
             </div>
           );
