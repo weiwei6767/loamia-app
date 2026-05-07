@@ -19,6 +19,7 @@ export function ResizableSplit({
   const [hydrated, setHydrated] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
   const draggingRef = useRef(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -47,6 +48,7 @@ export function ResizableSplit({
   function onMouseDown(e: React.MouseEvent) {
     e.preventDefault();
     draggingRef.current = true;
+    setIsDragging(true);
     document.body.style.cursor = "col-resize";
     document.body.style.userSelect = "none";
   }
@@ -62,6 +64,7 @@ export function ResizableSplit({
     function onUp() {
       if (!draggingRef.current) return;
       draggingRef.current = false;
+      setIsDragging(false);
       document.body.style.cursor = "";
       document.body.style.userSelect = "";
     }
@@ -77,47 +80,60 @@ export function ResizableSplit({
     <div ref={containerRef} className="flex flex-1 overflow-hidden h-full relative">
       <main className="flex-1 min-w-0 overflow-y-auto">{children}</main>
 
-      {/* xl+: inline resizable chat (hidden when collapsed) */}
-      {!collapsed && (
-        <>
-          <div
-            role="separator"
-            aria-orientation="vertical"
-            onMouseDown={onMouseDown}
-            onDoubleClick={() => setChatWidth(DEFAULT)}
-            className="hidden xl:block w-1 cursor-col-resize bg-[var(--line)] hover:bg-[var(--accent)]/40 transition shrink-0"
-            title="拖曳調整寬度（雙擊重設）"
-          />
-          <aside
-            className="border-l border-[var(--line)] overflow-hidden hidden xl:flex flex-col bg-[var(--surface)]/40 shrink-0 relative"
-            style={{ width: hydrated ? `${chatWidth}px` : `${DEFAULT}px` }}
-          >
-            <button
-              type="button"
-              onClick={() => setCollapsed(true)}
-              className="absolute top-2 right-2 z-10 w-7 h-7 flex items-center justify-center text-[var(--muted)] hover:text-[var(--foreground)] hover:bg-[var(--surface-2)] border border-[var(--line)] text-xs"
-              aria-label="收合對話面板"
-              title="收合對話面板"
-            >
-              →|
-            </button>
-            {rightContent}
-          </aside>
-        </>
-      )}
-
-      {/* xl+: floating button when collapsed */}
-      {collapsed && (
+      {/* xl+: inline resizable chat — animated collapse */}
+      <div
+        role="separator"
+        aria-orientation="vertical"
+        onMouseDown={onMouseDown}
+        onDoubleClick={() => setChatWidth(DEFAULT)}
+        className={`hidden xl:block w-1 cursor-col-resize bg-[var(--line)] hover:bg-[var(--accent)]/40 transition-[opacity] duration-300 shrink-0 ${
+          collapsed ? "opacity-0 pointer-events-none w-0" : "opacity-100"
+        }`}
+        title="拖曳調整寬度（雙擊重設）"
+      />
+      <aside
+        className={`border-l border-[var(--line)] overflow-hidden hidden xl:flex flex-col bg-[var(--surface)]/40 shrink-0 relative ${
+          isDragging
+            ? ""
+            : "transition-[width,opacity] duration-300 ease-[cubic-bezier(0.16,1,0.3,1)]"
+        }`}
+        style={{
+          width: collapsed ? "0px" : hydrated ? `${chatWidth}px` : `${DEFAULT}px`,
+          opacity: collapsed ? 0 : 1,
+          pointerEvents: collapsed ? "none" : "auto",
+        }}
+        aria-hidden={collapsed}
+      >
         <button
           type="button"
-          onClick={() => setCollapsed(false)}
-          className="hidden xl:flex fixed bottom-6 right-6 z-30 w-12 h-12 rounded-full bg-[var(--accent)] text-[var(--background)] shadow-2xl items-center justify-center text-xl font-bold hover:scale-110 active:scale-95 transition"
-          aria-label="開啟 Brand Brain 對話"
-          title="開啟 Brand Brain"
+          onClick={() => setCollapsed(true)}
+          className="absolute top-3 right-3 z-10 h-8 px-2.5 flex items-center gap-1 bg-[var(--accent)] text-[var(--background)] font-bold text-xs shadow-lg hover:scale-105 active:scale-95 transition"
+          aria-label="收合對話面板"
+          title="收合對話面板"
         >
-          💬
+          <span className="text-base leading-none">›</span>
+          <span className="tracking-wider">收合</span>
         </button>
-      )}
+        <div style={{ width: hydrated ? `${chatWidth}px` : `${DEFAULT}px` }} className="flex flex-col flex-1 min-h-0">
+          {rightContent}
+        </div>
+      </aside>
+
+      {/* xl+: floating button when collapsed (with pulse + scale-in animation) */}
+      <button
+        type="button"
+        onClick={() => setCollapsed(false)}
+        className={`hidden xl:flex fixed bottom-6 right-6 z-30 w-14 h-14 rounded-full bg-[var(--accent)] text-[var(--background)] items-center justify-center text-2xl font-bold transition-all duration-300 ease-[cubic-bezier(0.16,1,0.3,1)] ${
+          collapsed
+            ? "opacity-100 scale-100 pointer-events-auto shadow-[0_0_0_0_rgba(255,200,0,0.6)] animate-[chat-pulse_2s_ease-in-out_infinite] hover:scale-110 active:scale-95"
+            : "opacity-0 scale-50 pointer-events-none"
+        }`}
+        aria-label="開啟 Brand Brain 對話"
+        title="開啟 Brand Brain"
+        aria-hidden={!collapsed}
+      >
+        💬
+      </button>
 
       {/* < xl: floating button + slide-out drawer */}
       {!drawerOpen && (

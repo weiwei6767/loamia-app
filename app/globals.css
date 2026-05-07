@@ -128,6 +128,19 @@ body {
   50% { box-shadow: 0 0 0 8px transparent; }
 }
 
+@keyframes chat-pulse {
+  0%, 100% {
+    box-shadow:
+      0 0 0 0 color-mix(in srgb, var(--accent) 60%, transparent),
+      0 8px 24px color-mix(in srgb, var(--accent) 40%, transparent);
+  }
+  50% {
+    box-shadow:
+      0 0 0 12px transparent,
+      0 8px 24px color-mix(in srgb, var(--accent) 40%, transparent);
+  }
+}
+
 .widget-glow:hover {
   box-shadow:
     0 0 0 1px var(--accent),
