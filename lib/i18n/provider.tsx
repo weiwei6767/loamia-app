@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
+import { useRouter } from "next/navigation";
 import { translate, type DictKey, type Locale } from "./dict";
 
 type I18nContextValue = {
@@ -25,6 +26,7 @@ function writeCookie(locale: Locale) {
 }
 
 export function I18nProvider({ initialLocale, children }: { initialLocale: Locale; children: ReactNode }) {
+  const router = useRouter();
   const [locale, setLocaleState] = useState<Locale>(initialLocale);
 
   useEffect(() => {
@@ -32,11 +34,16 @@ export function I18nProvider({ initialLocale, children }: { initialLocale: Local
     if (c && c !== locale) setLocaleState(c);
   }, [locale]);
 
-  const setLocale = useCallback((l: Locale) => {
-    writeCookie(l);
-    setLocaleState(l);
-    document.documentElement.lang = l === "zh" ? "zh-TW" : "en";
-  }, []);
+  const setLocale = useCallback(
+    (l: Locale) => {
+      writeCookie(l);
+      setLocaleState(l);
+      document.documentElement.lang = l === "zh" ? "zh-TW" : "en";
+      // Force server components (legal pages, etc.) to re-render with new cookie
+      router.refresh();
+    },
+    [router]
+  );
 
   const t = useCallback((key: DictKey) => translate(key, locale), [locale]);
 

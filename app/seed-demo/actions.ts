@@ -218,10 +218,43 @@ export async function seedDemoBrand(): Promise<SeedResult> {
   const agencyId = memberships?.[0]?.agency_id;
   if (!agencyId) return { ok: false, error: "找不到 agency，請先完成 onboarding" };
 
-  // Create brand
+  // Idempotency: if a DEMO brand already exists in this agency, return it
+  const { data: existing } = await supabase
+    .from("brands")
+    .select("id, agency_id")
+    .eq("agency_id", agencyId)
+    .eq("name", BRAND_NAME)
+    .limit(1)
+    .maybeSingle();
+  if (existing) {
+    return { ok: true, brandId: existing.id as string };
+  }
+
+  // Create brand with Brand Identity columns populated directly on the row
   const { data: brand, error: brandErr } = await supabase
     .from("brands")
-    .insert({ name: BRAND_NAME, agency_id: agencyId })
+    .insert({
+      name: BRAND_NAME,
+      agency_id: agencyId,
+      positioning:
+        "台北中山區精品手搖飲品牌，主打「真材實料 + 慢工細活」，以高品質茶葉與限量風味鎖定講究品質的 25-40 歲都市上班族。不打折扣戰，主打一杯值得停下來品嚐的下午時光。",
+      target_audience:
+        "25-40 歲都市上班族（女性 70%、男性 30%），月收入 4 萬以上、住雙北中心商業區，在 Threads / IG 分享日常飲品、追求生活儀式感，對食品來源與少糖無添加敏感。",
+      tone_guide:
+        "親切但不誇張，像認識的朋友推薦一家好店。多用「我們」「一起」「慢慢」，少用「最棒」「超強」「炸裂」。台味繁中，適度英文（chill / vibe / mood）。描述茶飲用感官語言（回甘、韻味、層次、微苦轉甜）。每則 1-2 個 emoji 為限。",
+      taboo_words: [
+        "最便宜",
+        "最強",
+        "爆款",
+        "神級",
+        "絕對",
+        "跳樓大拍賣",
+        "手搖界天花板",
+        "誇張",
+        "瘋狂",
+        "無敵",
+      ],
+    })
     .select("id, agency_id")
     .single();
   if (brandErr || !brand)
@@ -321,4 +354,36 @@ export async function seedDemoBrand(): Promise<SeedResult> {
 export async function seedDemoBrandAndRedirect(): Promise<void> {
   const result = await seedDemoBrand();
   if (result.ok) redirect(`/brand/${result.brandId}`);
+}
+
+/**
+ * Delete ALL "DEMO 手搖飲" brands in the user's agency. Use this to clean up
+ * duplicates accidentally created by clicking the seed button multiple times.
+ */
+export async function deleteAllDemoBrands(): Promise<{ ok: boolean; deleted: number; error?: string }> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { ok: false, deleted: 0, error: "未登入" };
+
+  const { data: memberships } = await supabase
+    .from("agency_members")
+    .select("agency_id")
+    .limit(1);
+  const agencyId = memberships?.[0]?.agency_id;
+  if (!agencyId) return { ok: false, deleted: 0, error: "找不到 agency" };
+
+  const { data: brands } = await supabase
+    .from("brands")
+    .select("id")
+    .eq("agency_id", agencyId)
+    .eq("name", BRAND_NAME);
+  if (!brands || brands.length === 0) {
+    return { ok: true, deleted: 0 };
+  }
+  const ids = brands.map((b) => b.id as string);
+  const { error } = await supabase.from("brands").delete().in("id", ids);
+  if (error) return { ok: false, deleted: 0, error: error.message };
+  return { ok: true, deleted: ids.length };
 }

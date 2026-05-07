@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import { seedDemoBrand } from "./actions";
+import { seedDemoBrand, deleteAllDemoBrands } from "./actions";
 
 export const metadata = {
   title: "Seed Demo · Loamia",
@@ -15,10 +16,20 @@ async function runSeed() {
   redirect(`/seed-demo?error=${encodeURIComponent(result.error)}`);
 }
 
+async function runDelete() {
+  "use server";
+  const result = await deleteAllDemoBrands();
+  revalidatePath("/seed-demo");
+  if (result.ok) {
+    redirect(`/seed-demo?msg=${encodeURIComponent(`已刪除 ${result.deleted} 個 DEMO brand`)}`);
+  }
+  redirect(`/seed-demo?error=${encodeURIComponent(result.error ?? "刪除失敗")}`);
+}
+
 export default async function SeedDemoPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string }>;
+  searchParams: Promise<{ error?: string; msg?: string }>;
 }) {
   const params = await searchParams;
   const supabase = await createClient();
@@ -55,12 +66,15 @@ export default async function SeedDemoPage({
           <li>2 筆 Monitor 海巡歷史回覆（一筆已回覆 / 一筆已成交）</li>
         </ul>
 
-        <div className="border border-yellow-400/40 bg-yellow-400/5 p-3 text-xs text-yellow-400 leading-relaxed">
-          ⚠️ 每次點按鈕都會建立<strong>新的</strong> DEMO brand。如果重複按會有多個。建議只跑一次。
+        <div className="border border-[var(--accent)]/40 bg-[var(--accent)]/5 p-3 text-xs leading-relaxed">
+          ✓ <strong>已內建去重</strong>：如果同個 agency 已存在「DEMO 手搖飲」，按按鈕會直接跳到既有的，不會建立第二個。
         </div>
 
         {params.error && (
           <p className="text-xs text-red-400">✕ {params.error}</p>
+        )}
+        {params.msg && (
+          <p className="text-xs text-[var(--accent)]">✓ {params.msg}</p>
         )}
 
         <form action={runSeed}>
@@ -74,6 +88,23 @@ export default async function SeedDemoPage({
 
         <div className="text-[11px] text-[var(--muted)] leading-relaxed font-mono">
           灌完會自動跳轉到該 brand 頁面。embedding 處理約 5-10 秒。
+        </div>
+
+        <div className="border-t border-[var(--line)] pt-6 space-y-3">
+          <div className="font-mono text-xs tracking-widest text-[var(--muted)]">
+            CLEANUP
+          </div>
+          <p className="text-xs text-[var(--muted)] leading-relaxed">
+            如果你之前不小心多按了幾次，下面這個按鈕會把<strong>所有名為「DEMO 手搖飲」</strong>的品牌（含關聯文件、KOL、模板、Monitor 紀錄）一次刪除。請小心使用。
+          </p>
+          <form action={runDelete}>
+            <button
+              type="submit"
+              className="text-xs px-4 py-2 border border-red-400/60 text-red-400 hover:bg-red-400/10 transition"
+            >
+              🗑 刪除全部 DEMO 手搖飲
+            </button>
+          </form>
         </div>
       </div>
     </main>
