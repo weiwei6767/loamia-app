@@ -126,12 +126,22 @@ ${contextBlock}
  *  - Hard cap: max 5 tool turns
  *  - Returns single post text (≤500 chars)
  */
+export type GenEvent =
+  | { stage: "context" }
+  | { stage: "thinking"; turn: number }
+  | { stage: "tool_call"; tool: string; input: Record<string, unknown> }
+  | { stage: "tool_result"; tool: string; ok: boolean; summary: string }
+  | { stage: "writing" }
+  | { stage: "done"; text: string };
+
 export async function generateThreadsPostWithWebTools(
   supabase: SupabaseClient,
   brand: { id: string; agency_id: string; name: string },
   userId: string,
-  prompt: string
+  prompt: string,
+  onEvent?: (e: GenEvent) => void
 ): Promise<{ text: string; toolCalls: number; sources: string[] }> {
+  onEvent?.({ stage: "context" });
   // Brand context (same as non-agentic path)
   const chunks = await retrieveRelevantChunks(brand.id, prompt, "zh", 8);
   const contextBlock =
@@ -201,6 +211,7 @@ ${contextBlock}
   const MAX_TURNS = 6;
 
   for (let turn = 0; turn < MAX_TURNS; turn++) {
+    onEvent?.({ stage: "thinking", turn: turn + 1 });
     const resp = await client.messages.create({
       model: CHAT_MODEL,
       max_tokens: 2000,
@@ -214,6 +225,7 @@ ${contextBlock}
     messages.push({ role: "assistant", content: blocks });
 
     if (resp.stop_reason !== "tool_use") {
+      onEvent?.({ stage: "writing" });
       // Extract final text
       const text = blocks
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -223,6 +235,7 @@ ${contextBlock}
         .join("\n")
         .trim()
         .slice(0, 500);
+      onEvent?.({ stage: "done", text });
       return { text, toolCalls, sources };
     }
 
@@ -233,7 +246,13 @@ ${contextBlock}
     const toolResults: any[] = [];
     for (const tu of toolUses) {
       toolCalls += 1;
+      onEvent?.({
+        stage: "tool_call",
+        tool: tu.name,
+        input: (tu.input ?? {}) as Record<string, unknown>,
+      });
       let result: unknown;
+      let summary = "";
       if (tu.name === "web_search") {
         result = await executeWebSearch(supabase, brand, userId, tu.input ?? {});
         if (
@@ -243,9 +262,17 @@ ${contextBlock}
           (result as { ok: boolean }).ok &&
           "results" in result
         ) {
-          for (const r of (result as { results: { url: string }[] }).results) {
+          const arr = (result as { results: { url: string; title: string }[] }).results;
+          for (const r of arr) {
             if (r.url) sources.push(r.url);
           }
+          summary = `找到 ${arr.length} 筆結果`;
+        } else if (
+          typeof result === "object" &&
+          result !== null &&
+          "error" in result
+        ) {
+          summary = String((result as { error: string }).error).slice(0, 100);
         }
       } else if (tu.name === "web_fetch") {
         result = await executeWebFetch(tu.input ?? {});
@@ -256,11 +283,26 @@ ${contextBlock}
           (result as { ok: boolean }).ok &&
           "url" in result
         ) {
-          sources.push((result as { url: string }).url);
+          const r = result as { url: string; title?: string };
+          sources.push(r.url);
+          summary = String(r.title ?? r.url).slice(0, 80);
+        } else if (
+          typeof result === "object" &&
+          result !== null &&
+          "error" in result
+        ) {
+          summary = String((result as { error: string }).error).slice(0, 100);
         }
       } else {
         result = { ok: false, error: `unknown tool: ${tu.name}` };
+        summary = `unknown tool: ${tu.name}`;
       }
+      const ok =
+        typeof result === "object" &&
+        result !== null &&
+        "ok" in result &&
+        (result as { ok: boolean }).ok === true;
+      onEvent?.({ stage: "tool_result", tool: tu.name, ok, summary });
       toolResults.push({
         type: "tool_result",
         tool_use_id: tu.id,
@@ -271,6 +313,7 @@ ${contextBlock}
   }
 
   // Hit max turns — force a final answer
+  onEvent?.({ stage: "writing" });
   const final = await client.messages.create({
     model: CHAT_MODEL,
     max_tokens: 800,
@@ -286,6 +329,7 @@ ${contextBlock}
     .join("\n")
     .trim()
     .slice(0, 500);
+  onEvent?.({ stage: "done", text: finalText });
   return { text: finalText, toolCalls, sources };
 }
 

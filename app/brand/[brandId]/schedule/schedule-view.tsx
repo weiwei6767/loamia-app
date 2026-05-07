@@ -10,13 +10,11 @@ import {
   toggleTemplateActive,
   toggleTemplateWebTools,
   deletePostTemplate,
-  previewTemplateContent,
   saveTemplateNextText,
   clearTemplateNextText,
   updateTemplatePrompt,
   updateTemplateComments,
   type ScheduleState,
-  type PreviewState,
 } from "./actions";
 
 type Post = {
@@ -733,6 +731,87 @@ function EditablePrompt({
   );
 }
 
+type StageLabel = { icon: string; label: string };
+
+function stageLabel(ev: { stage: string } & Record<string, unknown>): StageLabel | null {
+  switch (ev.stage) {
+    case "context":
+      return { icon: "📚", label: "讀取品牌資料與 Brand Brain" };
+    case "thinking":
+      return { icon: "🤔", label: `思考中（第 ${ev.turn ?? 1} 輪）` };
+    case "tool_call": {
+      const tool = String(ev.tool ?? "");
+      const input = (ev.input ?? {}) as Record<string, string>;
+      if (tool === "web_search") return { icon: "🔍", label: `搜尋：${input.query ?? ""}` };
+      if (tool === "web_fetch") return { icon: "🌐", label: `抓取：${input.url ?? ""}` };
+      return { icon: "⚙", label: `工具：${tool}` };
+    }
+    case "tool_result": {
+      const ok = Boolean(ev.ok);
+      const summary = String(ev.summary ?? "");
+      return { icon: ok ? "✓" : "✕", label: summary || (ok ? "完成" : "失敗") };
+    }
+    case "writing":
+      return { icon: "✍", label: "撰寫貼文" };
+    case "done":
+      return { icon: "✓", label: "完成" };
+    default:
+      return null;
+  }
+}
+
+async function streamPreview(
+  brandId: string,
+  templateId: string,
+  onProgress: (label: StageLabel) => void
+): Promise<{ preview: string } | { error: string }> {
+  const res = await fetch(
+    `/api/brand/${brandId}/template/${templateId}/preview-stream`,
+    { method: "POST" }
+  );
+  if (!res.ok || !res.body) {
+    return { error: `HTTP ${res.status}` };
+  }
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buf = "";
+  let result: { preview: string } | { error: string } | null = null;
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buf += decoder.decode(value, { stream: true });
+    let sep = buf.indexOf("\n\n");
+    while (sep !== -1) {
+      const chunk = buf.slice(0, sep);
+      buf = buf.slice(sep + 2);
+      sep = buf.indexOf("\n\n");
+      const lines = chunk.split("\n");
+      let event = "message";
+      let data = "";
+      for (const ln of lines) {
+        if (ln.startsWith("event:")) event = ln.slice(6).trim();
+        else if (ln.startsWith("data:")) data += ln.slice(5).trim();
+      }
+      if (!data) continue;
+      try {
+        const parsed = JSON.parse(data);
+        if (event === "progress") {
+          const label = stageLabel(parsed);
+          if (label) onProgress(label);
+        } else if (event === "done") {
+          result = { preview: String(parsed.preview ?? "") };
+        } else if (event === "error") {
+          result = { error: String(parsed.message ?? "preview failed") };
+        }
+      } catch {
+        // skip malformed event
+      }
+    }
+  }
+  return result ?? { error: "no response" };
+}
+
 function EditableNextPost({
   template,
   brandId,
@@ -742,24 +821,30 @@ function EditableNextPost({
   brandId: string;
   onChange: () => void;
 }) {
-  const [previewState, previewAction, previewPending] = useActionState<PreviewState, FormData>(
-    previewTemplateContent,
-    undefined
-  );
   const [draft, setDraft] = useState(template.next_post_text ?? "");
   const [editingMode, setEditingMode] = useState(!!template.next_post_text);
   const [savePending, startTransition] = useTransition();
   const [msg, setMsg] = useState<string | null>(null);
+  const [previewing, setPreviewing] = useState(false);
+  const [progress, setProgress] = useState<StageLabel[]>([]);
+  const [previewError, setPreviewError] = useState<string | null>(null);
 
-  // When AI generates a fresh preview, reset draft to the new text and enter editing mode
-  useEffect(() => {
-    if (previewState && "success" in previewState && previewState.success) {
-      setDraft(previewState.preview);
-      setEditingMode(true);
-      onChange();
+  async function runPreview() {
+    setPreviewing(true);
+    setPreviewError(null);
+    setProgress([{ icon: "▶", label: "啟動 AI…" }]);
+    const res = await streamPreview(brandId, template.id, (label) => {
+      setProgress((p) => [...p, label]);
+    });
+    setPreviewing(false);
+    if ("error" in res) {
+      setPreviewError(res.error);
+      return;
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [previewState]);
+    setDraft(res.preview);
+    setEditingMode(true);
+    onChange();
+  }
 
   // Sync if template.next_post_text changes from outside
   useEffect(() => {
@@ -804,26 +889,54 @@ function EditableNextPost({
             <span className="ml-1 text-[var(--accent)]">· 🔒 已鎖定</span>
           )}
         </span>
-        <form action={previewAction} className="inline-flex">
-          <input type="hidden" name="templateId" value={template.id} />
-          <input type="hidden" name="brandId" value={brandId} />
-          <button
-            type="submit"
-            disabled={previewPending}
-            className="text-[10px] px-2 py-1 border border-[var(--accent)]/50 text-[var(--accent)] hover:bg-[var(--accent)] hover:text-[var(--background)] transition disabled:opacity-50 inline-flex items-center gap-1"
-          >
-            {previewPending ? (
-              <>
-                <span className="spinner" /> 生成中
-              </>
-            ) : hasLocked ? (
-              "↻ 重新生成"
-            ) : (
-              "✨ AI 生成下篇"
-            )}
-          </button>
-        </form>
+        <button
+          type="button"
+          onClick={runPreview}
+          disabled={previewing}
+          className="text-[10px] px-2 py-1 border border-[var(--accent)]/50 text-[var(--accent)] hover:bg-[var(--accent)] hover:text-[var(--background)] transition disabled:opacity-50 inline-flex items-center gap-1"
+        >
+          {previewing ? (
+            <>
+              <span className="spinner" /> 生成中
+            </>
+          ) : hasLocked ? (
+            "↻ 重新生成"
+          ) : (
+            "✨ AI 生成下篇"
+          )}
+        </button>
       </div>
+
+      {(previewing || progress.length > 0) && (
+        <div className="px-3 pb-3 pt-1 border-t border-[var(--line)] bg-[var(--surface-2)]/40">
+          <div className="text-[10px] font-mono tracking-wide text-[var(--muted)] mb-2">
+            {previewing ? "🤖 AI 進度" : "📋 上次執行歷程"}
+            {template.enable_web_tools && (
+              <span className="ml-2 text-[var(--accent)]">· 🌐 已啟用上網</span>
+            )}
+          </div>
+          <ol className="space-y-1">
+            {progress.map((p, i) => (
+              <li
+                key={i}
+                className="text-[11px] leading-relaxed flex items-start gap-1.5 text-[var(--foreground)]"
+                style={{ animation: "widget-pop 0.25s ease-out" }}
+              >
+                <span className="shrink-0 w-4 text-[var(--accent)]">{p.icon}</span>
+                <span className="break-all">{p.label}</span>
+              </li>
+            ))}
+            {previewing && (
+              <li className="text-[11px] leading-relaxed flex items-start gap-1.5 text-[var(--muted)]">
+                <span className="shrink-0 w-4">
+                  <span className="spinner inline-block" />
+                </span>
+                <span>處理中…</span>
+              </li>
+            )}
+          </ol>
+        </div>
+      )}
 
       {editingMode && (
         <div className="px-3 pb-3 pt-1 border-t border-[var(--line)] space-y-2">
@@ -866,8 +979,8 @@ function EditableNextPost({
         </div>
       )}
 
-      {previewState && "error" in previewState && (
-        <p className="px-3 pb-3 text-[10px] text-red-400">{previewState.error}</p>
+      {previewError && (
+        <p className="px-3 pb-3 text-[10px] text-red-400">✕ {previewError}</p>
       )}
     </div>
   );

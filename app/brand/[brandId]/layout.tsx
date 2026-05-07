@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getServerT } from "@/lib/i18n/server";
 import { BrandStatusToggle } from "./brand-status-toggle";
 import { BrandSidebar } from "./sidebar";
+import { MobileSidebarTrigger } from "./mobile-sidebar";
 import { ResizableSplit } from "./resizable-split";
 import { RightChatPanel } from "./right-chat-panel";
 
@@ -34,6 +35,7 @@ export default async function BrandLayout({
       <header className="border-b border-[var(--line)] shrink-0">
         <div className="flex items-center justify-between px-4 py-3 gap-4">
           <div className="flex items-center gap-3 min-w-0">
+            <MobileSidebarTrigger brandId={brand.id} />
             <Link
               href="/dashboard"
               className="text-xs text-[var(--muted)] hover:text-[var(--foreground)] shrink-0"
