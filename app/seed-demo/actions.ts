@@ -65,7 +65,7 @@ const KOLS = [
     niche_tags: ["生活", "下午茶", "台北"],
     contact_email: "vivian@example.com",
     rate_note: "1 篇 IG post + 1 則 story 約 NTD 18,000",
-    status: "negotiating",
+    status: "contacted",
     campaign_name: "2026 母親節",
     rate_paid: null,
     collab_notes: "已合作 2 次，互動率穩定 5%+，配合度高，適合長期",
@@ -79,7 +79,7 @@ const KOLS = [
     niche_tags: ["美食", "飲料", "雙北"],
     contact_email: "chris@agency.com",
     rate_note: "1 IG reel NTD 35,000；含 1 則 Threads 補推 +5,000",
-    status: "delivered",
+    status: "completed",
     campaign_name: "2026 春季新茶到",
     rate_paid: "40000",
     collab_notes: "reel 觸及 24 萬，導購 287 杯（透過追蹤碼），ROAS 約 1.7",
@@ -204,6 +204,61 @@ async function ensureCampaignHistoryDoc(
     .eq("id", doc.id);
 }
 
+const BRAND_IDENTITY_FIELDS = {
+  positioning:
+    "台北中山區精品手搖飲品牌，主打「真材實料 + 慢工細活」，以高品質茶葉與限量風味鎖定講究品質的 25-40 歲都市上班族。不打折扣戰，主打一杯值得停下來品嚐的下午時光。",
+  target_audience:
+    "25-40 歲都市上班族（女性 70%、男性 30%），月收入 4 萬以上、住雙北中心商業區，在 Threads / IG 分享日常飲品、追求生活儀式感，對食品來源與少糖無添加敏感。",
+  tone_guide:
+    "親切但不誇張，像認識的朋友推薦一家好店。多用「我們」「一起」「慢慢」，少用「最棒」「超強」「炸裂」。台味繁中，適度英文（chill / vibe / mood）。描述茶飲用感官語言（回甘、韻味、層次、微苦轉甜）。每則 1-2 個 emoji 為限。",
+  taboo_words: [
+    "最便宜",
+    "最強",
+    "爆款",
+    "神級",
+    "絕對",
+    "跳樓大拍賣",
+    "手搖界天花板",
+    "誇張",
+    "瘋狂",
+    "無敵",
+  ],
+};
+
+const MONITOR_HISTORY = [
+  {
+    source_text:
+      "今天下午想喝茶，想找台北中山附近不錯的手搖店，要茶葉品質好的，求推薦",
+    source_type: "Threads · @taipei_drinks_lover",
+    tone: "親切",
+    suggestions: [
+      "下午 3 點剛好是我們最忙的時段呢，中山這邊的茶飲選擇真的滿多的，每家風格都不太一樣，可以挑自己順眼的試試 ☕",
+      "中山附近還滿幸福的，茶飲品質有水準的店其實不少。想要茶葉本味突出一點的話，可以找標榜「單品茶」的，少糖喝下去比較分得出層次。",
+      "我們在中山這邊也有店，主打日月潭紅茶跟阿里山金萱，下午 3-5 點這個時段比較有位子可以坐下來慢慢喝～",
+    ],
+    picked_index: 1,
+    sent_text:
+      "中山附近還滿幸福的，茶飲品質有水準的店其實不少。想要茶葉本味突出一點的話，可以找標榜「單品茶」的，少糖喝下去比較分得出層次。",
+    days_ago: 3,
+    outcome: "replied",
+  },
+  {
+    source_text: "母親節送什麼飲料禮盒比較不踩雷？預算 1500 內",
+    source_type: "Threads · @gift_ideas_taipei",
+    tone: "專業",
+    suggestions: [
+      "茶禮盒比較不會出錯，挑那種有手寫卡片的會更有心意。1500 預算抓 3 杯左右算是剛好，喝得完不浪費。",
+      "母親節飲料禮盒我覺得茶款比咖啡保險，長輩接受度高很多。可以找有冷熱兩飲的，這樣媽媽什麼時候想喝都行。",
+      "預算 1500 內的話我們家剛好有「孝心三杯組」，含日月潭紅茶 + 金萱拿鐵 + 季節限定，附手寫卡片，可參考看看。",
+    ],
+    picked_index: 2,
+    sent_text:
+      "預算 1500 內的話我們家剛好有「孝心三杯組」，含日月潭紅茶 + 金萱拿鐵 + 季節限定，附手寫卡片，可參考看看。",
+    days_ago: 1,
+    outcome: "converted",
+  },
+];
+
 export async function seedDemoBrand(): Promise<SeedResult> {
   const supabase = await createClient();
   const {
@@ -218,67 +273,101 @@ export async function seedDemoBrand(): Promise<SeedResult> {
   const agencyId = memberships?.[0]?.agency_id;
   if (!agencyId) return { ok: false, error: "找不到 agency，請先完成 onboarding" };
 
-  // Idempotency: if a DEMO brand already exists in this agency, return it
+  const errors: string[] = [];
+
+  // ── Brand (idempotent: reuse if exists, else create with Identity columns) ──
+  let brand: { id: string; agency_id: string };
   const { data: existing } = await supabase
     .from("brands")
-    .select("id, agency_id")
+    .select("id, agency_id, positioning, target_audience, tone_guide, taboo_words")
     .eq("agency_id", agencyId)
     .eq("name", BRAND_NAME)
     .limit(1)
     .maybeSingle();
+
   if (existing) {
-    return { ok: true, brandId: existing.id as string };
+    brand = { id: existing.id as string, agency_id: existing.agency_id as string };
+    // Backfill Brand Identity if missing (older seed didn't populate these)
+    const needsBackfill =
+      !existing.positioning ||
+      !existing.target_audience ||
+      !existing.tone_guide ||
+      !existing.taboo_words ||
+      (existing.taboo_words as string[]).length === 0;
+    if (needsBackfill) {
+      const { error } = await supabase
+        .from("brands")
+        .update(BRAND_IDENTITY_FIELDS)
+        .eq("id", brand.id);
+      if (error) errors.push(`brand identity backfill: ${error.message}`);
+    }
+  } else {
+    const { data: created, error: brandErr } = await supabase
+      .from("brands")
+      .insert({
+        name: BRAND_NAME,
+        agency_id: agencyId,
+        ...BRAND_IDENTITY_FIELDS,
+      })
+      .select("id, agency_id")
+      .single();
+    if (brandErr || !created) {
+      return { ok: false, error: brandErr?.message ?? "建立 brand 失敗" };
+    }
+    brand = { id: created.id as string, agency_id: created.agency_id as string };
   }
 
-  // Create brand with Brand Identity columns populated directly on the row
-  const { data: brand, error: brandErr } = await supabase
-    .from("brands")
-    .insert({
-      name: BRAND_NAME,
-      agency_id: agencyId,
-      positioning:
-        "台北中山區精品手搖飲品牌，主打「真材實料 + 慢工細活」，以高品質茶葉與限量風味鎖定講究品質的 25-40 歲都市上班族。不打折扣戰，主打一杯值得停下來品嚐的下午時光。",
-      target_audience:
-        "25-40 歲都市上班族（女性 70%、男性 30%），月收入 4 萬以上、住雙北中心商業區，在 Threads / IG 分享日常飲品、追求生活儀式感，對食品來源與少糖無添加敏感。",
-      tone_guide:
-        "親切但不誇張，像認識的朋友推薦一家好店。多用「我們」「一起」「慢慢」，少用「最棒」「超強」「炸裂」。台味繁中，適度英文（chill / vibe / mood）。描述茶飲用感官語言（回甘、韻味、層次、微苦轉甜）。每則 1-2 個 emoji 為限。",
-      taboo_words: [
-        "最便宜",
-        "最強",
-        "爆款",
-        "神級",
-        "絕對",
-        "跳樓大拍賣",
-        "手搖界天花板",
-        "誇張",
-        "瘋狂",
-        "無敵",
-      ],
-    })
-    .select("id, agency_id")
-    .single();
-  if (brandErr || !brand)
-    return { ok: false, error: brandErr?.message ?? "建立 brand 失敗" };
+  // ── Documents (skip if already has seeded ones with tag="seed") ──
+  const { data: seededDocs } = await supabase
+    .from("documents")
+    .select("id")
+    .eq("brand_id", brand.id)
+    .contains("tags", ["seed"]);
+  if (!seededDocs || seededDocs.length === 0) {
+    try {
+      await ensureBrandIdentityDoc(supabase, brand);
+    } catch (err) {
+      errors.push(`identity doc: ${err instanceof Error ? err.message : "fail"}`);
+    }
+    try {
+      await ensureCampaignHistoryDoc(supabase, brand);
+    } catch (err) {
+      errors.push(`campaign doc: ${err instanceof Error ? err.message : "fail"}`);
+    }
+  }
 
-  try {
-    // Seed both docs (with embeddings)
-    await ensureBrandIdentityDoc(supabase, brand);
-    await ensureCampaignHistoryDoc(supabase, brand);
-
-    // Seed KOLs
-    await supabase.from("brand_kols").insert(
-      KOLS.map((k) => ({
+  // ── KOLs (skip individual ones already in DB by name) ──
+  const { data: existingKols } = await supabase
+    .from("brand_kols")
+    .select("name")
+    .eq("brand_id", brand.id);
+  const existingKolNames = new Set(
+    ((existingKols ?? []) as { name: string }[]).map((k) => k.name)
+  );
+  const newKols = KOLS.filter((k) => !existingKolNames.has(k.name));
+  if (newKols.length > 0) {
+    const { error } = await supabase.from("brand_kols").insert(
+      newKols.map((k) => ({
         agency_id: brand.agency_id,
         brand_id: brand.id,
         user_id: user.id,
         ...k,
       }))
     );
+    if (error) errors.push(`kols: ${error.message}`);
+  }
 
-    // Seed an active post template
+  // ── Post template (skip if already exists by name) ──
+  const { data: existingTmpl } = await supabase
+    .from("post_templates")
+    .select("id")
+    .eq("brand_id", brand.id)
+    .eq("name", "每日下午茶 mood")
+    .limit(1);
+  if (!existingTmpl || existingTmpl.length === 0) {
     const nextRun = new Date();
     nextRun.setUTCHours(nextRun.getUTCHours() + 1);
-    await supabase.from("post_templates").insert({
+    const { error } = await supabase.from("post_templates").insert({
       agency_id: brand.agency_id,
       brand_id: brand.id,
       user_id: user.id,
@@ -296,59 +385,48 @@ export async function seedDemoBrand(): Promise<SeedResult> {
       enable_web_tools: false,
       active: true,
     });
+    if (error) errors.push(`template: ${error.message}`);
+  }
 
-    // Seed monitor history (engagement engine examples)
-    await supabase.from("monitor_replies").insert([
-      {
+  // ── Monitor replies (skip if already exists by source_text) ──
+  const { data: existingMonitor } = await supabase
+    .from("monitor_replies")
+    .select("source_text")
+    .eq("brand_id", brand.id);
+  const existingSources = new Set(
+    ((existingMonitor ?? []) as { source_text: string }[]).map((m) => m.source_text)
+  );
+  const newMonitor = MONITOR_HISTORY.filter(
+    (m) => !existingSources.has(m.source_text)
+  );
+  if (newMonitor.length > 0) {
+    const { error } = await supabase.from("monitor_replies").insert(
+      newMonitor.map((m) => ({
         brand_id: brand.id,
         agency_id: brand.agency_id,
         user_id: user.id,
-        source_text:
-          "今天下午想喝茶，想找台北中山附近不錯的手搖店，要茶葉品質好的，求推薦",
-        source_type: "Threads · @taipei_drinks_lover",
-        tone: "親切",
-        suggestions: [
-          "下午 3 點剛好是我們最忙的時段呢，中山這邊的茶飲選擇真的滿多的，每家風格都不太一樣，可以挑自己順眼的試試 ☕",
-          "中山附近還滿幸福的，茶飲品質有水準的店其實不少。想要茶葉本味突出一點的話，可以找標榜「單品茶」的，少糖喝下去比較分得出層次。",
-          "我們在中山這邊也有店，主打日月潭紅茶跟阿里山金萱，下午 3-5 點這個時段比較有位子可以坐下來慢慢喝～",
-        ],
+        source_text: m.source_text,
+        source_type: m.source_type,
+        tone: m.tone,
+        suggestions: m.suggestions,
         threads_url: null,
-        picked_index: 1,
-        sent_text:
-          "中山附近還滿幸福的，茶飲品質有水準的店其實不少。想要茶葉本味突出一點的話，可以找標榜「單品茶」的，少糖喝下去比較分得出層次。",
-        sent_at: new Date(Date.now() - 86400000 * 3).toISOString(),
+        picked_index: m.picked_index,
+        sent_text: m.sent_text,
+        sent_at: new Date(Date.now() - 86400000 * m.days_ago).toISOString(),
         sent_platform: "threads",
-        outcome: "replied",
-      },
-      {
-        brand_id: brand.id,
-        agency_id: brand.agency_id,
-        user_id: user.id,
-        source_text: "母親節送什麼飲料禮盒比較不踩雷？預算 1500 內",
-        source_type: "Threads · @gift_ideas_taipei",
-        tone: "專業",
-        suggestions: [
-          "茶禮盒比較不會出錯，挑那種有手寫卡片的會更有心意。1500 預算抓 3 杯左右算是剛好，喝得完不浪費。",
-          "母親節飲料禮盒我覺得茶款比咖啡保險，長輩接受度高很多。可以找有冷熱兩飲的，這樣媽媽什麼時候想喝都行。",
-          "預算 1500 內的話我們家剛好有「孝心三杯組」，含日月潭紅茶 + 金萱拿鐵 + 季節限定，附手寫卡片，可參考看看。",
-        ],
-        threads_url: null,
-        picked_index: 2,
-        sent_text:
-          "預算 1500 內的話我們家剛好有「孝心三杯組」，含日月潭紅茶 + 金萱拿鐵 + 季節限定，附手寫卡片，可參考看看。",
-        sent_at: new Date(Date.now() - 86400000 * 1).toISOString(),
-        sent_platform: "threads",
-        outcome: "converted",
-      },
-    ]);
+        outcome: m.outcome,
+      }))
+    );
+    if (error) errors.push(`monitor: ${error.message}`);
+  }
 
-    return { ok: true, brandId: brand.id as string };
-  } catch (err) {
+  if (errors.length > 0) {
     return {
       ok: false,
-      error: err instanceof Error ? err.message : "seed 過程出錯",
+      error: `部分資料未灌入：${errors.join(" | ")}（brand 已建立 ${brand.id}）`,
     };
   }
+  return { ok: true, brandId: brand.id };
 }
 
 export async function seedDemoBrandAndRedirect(): Promise<void> {
