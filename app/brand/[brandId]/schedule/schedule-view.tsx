@@ -8,6 +8,7 @@ import {
   deleteScheduledPost,
   createPostTemplate,
   toggleTemplateActive,
+  toggleTemplateWebTools,
   deletePostTemplate,
   previewTemplateContent,
   saveTemplateNextText,
@@ -41,6 +42,7 @@ type Template = {
   active: boolean;
   next_post_text: string | null;
   comments: string[];
+  enable_web_tools: boolean;
 };
 
 const WEEKDAYS = ["週日", "週一", "週二", "週三", "週四", "週五", "週六"];
@@ -333,6 +335,20 @@ function TemplateScheduler({
               className="w-full border border-[var(--line)] bg-[var(--surface)] px-3 py-2 text-sm focus:border-[var(--accent)] focus:outline-none leading-relaxed"
             />
           </div>
+          <label className="flex items-start gap-2 text-xs text-[var(--muted)] cursor-pointer select-none border border-[var(--line)] bg-[var(--surface)] px-3 py-2">
+            <input
+              type="checkbox"
+              name="enableWebTools"
+              className="mt-0.5 accent-[var(--accent)]"
+            />
+            <span>
+              <span className="font-bold text-[var(--foreground)]">🌐 啟用上網搜尋</span>
+              <span className="block mt-0.5 text-[11px] leading-relaxed">
+                每次生成貼文時，AI 可上網搜公開資訊（節日、新聞、產業趨勢）並寫進貼文。<br />
+                <span className="text-[var(--accent)]">隱私保護：</span>會自動阻擋包含品牌私有資訊的搜尋字串。
+              </span>
+            </span>
+          </label>
           <div className="flex items-center gap-3 flex-wrap">
             <select
               name="recurrence"
@@ -434,12 +450,30 @@ function TemplateCard({ template, brandId }: { template: Template; brandId: stri
           <div className="font-bold text-sm">{template.name}</div>
           <div className="mt-1 text-[10px] text-[var(--accent)] font-mono tracking-wide">
             {recur} · {template.active ? "✓ 啟用中" : "⏸ 暫停"}
+            {template.enable_web_tools && <span className="ml-2">· 🌐 上網搜尋</span>}
           </div>
           <div className="mt-2 text-[10px] text-[var(--muted)] font-mono">
             下次執行：{new Date(template.next_run_at).toLocaleString()}
           </div>
         </div>
         <div className="flex items-center gap-2 shrink-0">
+          <button
+            type="button"
+            disabled={pending}
+            onClick={() =>
+              startTransition(() =>
+                toggleTemplateWebTools(template.id, !template.enable_web_tools, brandId)
+              )
+            }
+            title={template.enable_web_tools ? "關閉上網搜尋" : "啟用上網搜尋"}
+            className={`text-[10px] px-2 py-1 border transition disabled:opacity-50 ${
+              template.enable_web_tools
+                ? "border-[var(--accent)] text-[var(--accent)] bg-[var(--accent)]/10"
+                : "border-[var(--line)] text-[var(--muted)] hover:border-[var(--accent)] hover:text-[var(--accent)]"
+            }`}
+          >
+            🌐 {template.enable_web_tools ? "關閉搜尋" : "開啟搜尋"}
+          </button>
           <button
             type="button"
             disabled={pending}

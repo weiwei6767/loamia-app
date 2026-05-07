@@ -35,7 +35,7 @@ export default async function SchedulePage({
       .limit(100),
     supabase
       .from("post_templates")
-      .select("id, name, prompt, recurrence, weekday, time_of_day, interval_hours, next_run_at, active, next_post_text, comments, created_at")
+      .select("id, name, prompt, recurrence, weekday, time_of_day, interval_hours, next_run_at, active, next_post_text, comments, enable_web_tools, created_at")
       .eq("brand_id", brand.id)
       .order("created_at", { ascending: false }),
     supabase
@@ -85,6 +85,7 @@ export default async function SchedulePage({
             active: tp.active as boolean,
             next_post_text: (tp.next_post_text as string | null) ?? null,
             comments: (tp.comments as string[] | null) ?? [],
+            enable_web_tools: Boolean(tp.enable_web_tools),
           }))}
         />
     </div>

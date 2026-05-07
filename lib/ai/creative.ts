@@ -3,6 +3,8 @@ import { anthropic, CHAT_MODEL } from "./anthropic";
 import { retrieveRelevantChunks } from "./report";
 import { createClient } from "@/lib/supabase/server";
 import { assembleBrandBrainContext, formatBrandBrainPrompt } from "./brand-brain";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { executeWebSearch, executeWebFetch } from "./tools";
 
 export type ContentType =
   | "ig_post"
@@ -114,6 +116,177 @@ ${contextBlock}
     variants: variants.length > 0 ? variants : [raw.trim()],
     sources: chunks.map((c) => c.filename).filter(Boolean),
   };
+}
+
+/**
+ * Agentic Threads-post generator with web tools.
+ * Used by scheduler when template.enable_web_tools = true.
+ * Privacy + cost guards:
+ *  - Same blacklist filter as chat (reuses executeWebSearch)
+ *  - Hard cap: max 5 tool turns
+ *  - Returns single post text (≤500 chars)
+ */
+export async function generateThreadsPostWithWebTools(
+  supabase: SupabaseClient,
+  brand: { id: string; agency_id: string; name: string },
+  userId: string,
+  prompt: string
+): Promise<{ text: string; toolCalls: number; sources: string[] }> {
+  // Brand context (same as non-agentic path)
+  const chunks = await retrieveRelevantChunks(brand.id, prompt, "zh", 8);
+  const contextBlock =
+    chunks.length === 0
+      ? "（沒有找到相關歷史資料）"
+      : chunks.map((c, i) => `[${i + 1}] ${c.content}`).join("\n\n");
+
+  const brainCtx = await assembleBrandBrainContext(supabase, brand.id, "caption");
+  const brainBlock = brainCtx ? formatBrandBrainPrompt(brainCtx) : "";
+
+  const systemPrompt = `你是 Loamia 的 AI 排程貼文生成助理，為「${brand.name}」產出符合品牌調性的單則 Threads 貼文。
+
+## 內容類型
+${CONTENT_TYPE_HINTS.threads_post.zh}
+
+## 使用者 prompt（模板原始指令）
+${prompt.trim()}
+
+${brainBlock ? `# Brand Brain\n${brainBlock}\n` : ""}
+## 品牌歷史資料
+${contextBlock}
+
+## 你可以使用的工具
+- web_search：搜尋公開網路（DuckDuckGo），用來找今日新聞、產業趨勢、節慶話題、公開素材
+- web_fetch：抓取特定 URL 的內容
+
+## 🚨 隱私強制規則（違反就是失職）
+1. web_search 的 query 只能是「一般公開知識性問題」，例如「台灣 5 月 7 日 節日」「手搖飲市場 2026 趨勢」
+2. **絕對不可在 query 內**包含品牌私有資訊：使用者私存的品牌名（除非廣為人知）、客戶聯絡資料、合作費率、KOL 名單、未公開檔期、Brand Identity 細節、Winning Memory
+3. query 想拿時事題材時：搜尋「該產業／類別／節氣／日期」，不要把品牌名、客戶名塞進去
+4. 至多呼叫 5 次工具，超過要立刻收斂出最終貼文
+5. 完成後直接輸出最終貼文文字（不超過 500 字、繁體中文、無前言、無「以下是貼文」這類說明），數字事實要有公開來源
+
+## 規則
+1. 用繁體中文
+2. 只輸出 1 則貼文（不要多個變體）
+3. 風格要呼應品牌調性，遵守 Brand Identity 禁忌詞
+4. 數字／事實只能來自上方資料 + 你搜到的公開內容；資料中沒的避免具體數字`;
+
+  const tools = [
+    {
+      name: "web_search",
+      description:
+        "Search the public web (DuckDuckGo). Query MUST be generic public knowledge — never include private brand data.",
+      input_schema: {
+        type: "object" as const,
+        properties: { query: { type: "string", description: "Generic public-knowledge query, ≤100 chars" } },
+        required: ["query"],
+      },
+    },
+    {
+      name: "web_fetch",
+      description: "Fetch a specific URL and return its visible text.",
+      input_schema: {
+        type: "object" as const,
+        properties: { url: { type: "string", description: "The URL to fetch (http/https)" } },
+        required: ["url"],
+      },
+    },
+  ];
+
+  const client = await anthropic();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const messages: any[] = [{ role: "user", content: "請依模板 prompt 生成這次的 Threads 貼文。" }];
+  let toolCalls = 0;
+  const sources: string[] = [...chunks.map((c) => c.filename).filter(Boolean)];
+  const MAX_TURNS = 6;
+
+  for (let turn = 0; turn < MAX_TURNS; turn++) {
+    const resp = await client.messages.create({
+      model: CHAT_MODEL,
+      max_tokens: 2000,
+      system: systemPrompt,
+      tools,
+      messages,
+    });
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const blocks: any[] = resp.content as any[];
+    messages.push({ role: "assistant", content: blocks });
+
+    if (resp.stop_reason !== "tool_use") {
+      // Extract final text
+      const text = blocks
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        .filter((b: any) => b.type === "text")
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        .map((b: any) => String(b.text ?? ""))
+        .join("\n")
+        .trim()
+        .slice(0, 500);
+      return { text, toolCalls, sources };
+    }
+
+    // Handle tool calls
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const toolUses = blocks.filter((b: any) => b.type === "tool_use");
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const toolResults: any[] = [];
+    for (const tu of toolUses) {
+      toolCalls += 1;
+      let result: unknown;
+      if (tu.name === "web_search") {
+        result = await executeWebSearch(supabase, brand, userId, tu.input ?? {});
+        if (
+          typeof result === "object" &&
+          result !== null &&
+          "ok" in result &&
+          (result as { ok: boolean }).ok &&
+          "results" in result
+        ) {
+          for (const r of (result as { results: { url: string }[] }).results) {
+            if (r.url) sources.push(r.url);
+          }
+        }
+      } else if (tu.name === "web_fetch") {
+        result = await executeWebFetch(tu.input ?? {});
+        if (
+          typeof result === "object" &&
+          result !== null &&
+          "ok" in result &&
+          (result as { ok: boolean }).ok &&
+          "url" in result
+        ) {
+          sources.push((result as { url: string }).url);
+        }
+      } else {
+        result = { ok: false, error: `unknown tool: ${tu.name}` };
+      }
+      toolResults.push({
+        type: "tool_result",
+        tool_use_id: tu.id,
+        content: JSON.stringify(result).slice(0, 4000),
+      });
+    }
+    messages.push({ role: "user", content: toolResults });
+  }
+
+  // Hit max turns — force a final answer
+  const final = await client.messages.create({
+    model: CHAT_MODEL,
+    max_tokens: 800,
+    system: systemPrompt + "\n\n達到工具呼叫上限，請依目前資訊立刻輸出最終貼文。",
+    messages,
+  });
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const finalText = (final.content as any[])
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    .filter((b: any) => b.type === "text")
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    .map((b: any) => String(b.text ?? ""))
+    .join("\n")
+    .trim()
+    .slice(0, 500);
+  return { text: finalText, toolCalls, sources };
 }
 
 const REPLY_SEPARATOR = "===REPLY===";

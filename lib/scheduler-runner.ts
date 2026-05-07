@@ -2,7 +2,7 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createPost, createReply } from "@/lib/threads/api";
 import { computeNextRun, type Recurrence } from "@/lib/scheduler";
-import { generateContentVariants } from "@/lib/ai/creative";
+import { generateContentVariants, generateThreadsPostWithWebTools } from "@/lib/ai/creative";
 
 export type RunResult = {
   processed: number;
@@ -36,6 +36,7 @@ type TemplateRow = {
   next_run_at: string;
   next_post_text: string | null;
   comments: string[] | null;
+  enable_web_tools: boolean | null;
 };
 
 /**
@@ -55,7 +56,7 @@ export async function runScheduler(
   let tmplQuery = supabase
     .from("post_templates")
     .select(
-      "id, agency_id, brand_id, user_id, prompt, recurrence, weekday, time_of_day, interval_hours, tz_offset_minutes, next_run_at, next_post_text, comments"
+      "id, agency_id, brand_id, user_id, prompt, recurrence, weekday, time_of_day, interval_hours, tz_offset_minutes, next_run_at, next_post_text, comments, enable_web_tools"
     )
     .eq("active", true)
     .lte("next_run_at", nowIso);
@@ -75,6 +76,14 @@ export async function runScheduler(
       let text: string;
       if (tmpl.next_post_text && tmpl.next_post_text.trim()) {
         text = tmpl.next_post_text.trim().slice(0, 500);
+      } else if (tmpl.enable_web_tools) {
+        const agentic = await generateThreadsPostWithWebTools(
+          supabase,
+          { id: tmpl.brand_id, agency_id: tmpl.agency_id, name: brand.name as string },
+          tmpl.user_id ?? "00000000-0000-0000-0000-000000000000",
+          tmpl.prompt
+        );
+        text = agentic.text.slice(0, 500);
       } else {
         const aiResult = await generateContentVariants(
           tmpl.brand_id,

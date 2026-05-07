@@ -13,7 +13,8 @@ type Message = {
 };
 
 type CreateResponse = {
-  content: { type: string; text?: string }[];
+  content: ContentBlock[];
+  stop_reason?: string | null;
 };
 
 type ToolDef = {
@@ -53,6 +54,7 @@ type AnthropicClient = {
     create(args: {
       model: string;
       max_tokens: number;
+      system?: string;
       messages: Message[];
       tools?: ToolDef[];
     }): Promise<CreateResponse>;

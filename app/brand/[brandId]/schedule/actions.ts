@@ -120,6 +120,7 @@ export async function createPostTemplate(
   const intervalHoursRaw = String(formData.get("intervalHours") ?? "").trim();
   const tzOffsetMinutes = parseInt(String(formData.get("tzOffsetMinutes") ?? "0"), 10) || 0;
 
+  const enableWebTools = formData.get("enableWebTools") === "on";
   const commentsRaw = String(formData.get("comments") ?? "").trim();
   const comments = commentsRaw
     ? commentsRaw
@@ -186,6 +187,7 @@ export async function createPostTemplate(
     tz_offset_minutes: tzOffsetMinutes,
     next_run_at: next.toISOString(),
     comments,
+    enable_web_tools: enableWebTools,
     active: true,
   });
   if (error) return { error: error.message };
@@ -324,6 +326,15 @@ export async function updateTemplatePrompt(
 export async function toggleTemplateActive(templateId: string, active: boolean, brandId: string) {
   const supabase = await createClient();
   await supabase.from("post_templates").update({ active }).eq("id", templateId);
+  revalidatePath(`/brand/${brandId}/schedule`);
+}
+
+export async function toggleTemplateWebTools(templateId: string, enable: boolean, brandId: string) {
+  const supabase = await createClient();
+  await supabase
+    .from("post_templates")
+    .update({ enable_web_tools: enable })
+    .eq("id", templateId);
   revalidatePath(`/brand/${brandId}/schedule`);
 }
 
